@@ -6,6 +6,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { apiAddOrder, apiCreateCheckout, apiGeocode, apiReverseGeocode } from '../api';
 import { TermsModal } from '../components/TermsContent';
+import { CARTO_ATTRIBUTION, cartoVoyagerUrl } from '../lib/mapTiles';
 
 const PRICE_PER_GALLON = 40;
 const DELIVERY_FEE     = 20;
@@ -55,10 +56,7 @@ function DeliveryPinMap({ pin, onPinChange }) {
         style={{ height: 220, width: '100%' }}
         scrollWheelZoom={false}
       >
-        <TileLayer
-          attribution='&copy; OpenStreetMap &copy; CARTO'
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-        />
+        <TileLayer attribution={CARTO_ATTRIBUTION} url={cartoVoyagerUrl()} />
         <MapClickHandler onPick={onPinChange} />
         <RecenterOnPin lat={pin.lat} lng={pin.lng} />
         <Marker

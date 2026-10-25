@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet'
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { apiGetDeliveryRoute, apiUpdateOrder } from '../api';
+import { CARTO_ATTRIBUTION, cartoVoyagerUrl } from '../lib/mapTiles';
 
 // Vite/webpack break Leaflet's default marker icon paths — rebuild them from CDN so pins actually render.
 delete L.Icon.Default.prototype._getIconUrl;
@@ -118,10 +119,7 @@ export default function DeliveryRoutePage() {
       {/* Map */}
       <div className="flex-1 rounded-2xl overflow-hidden shadow-sm">
         <MapContainer center={center} zoom={14} style={{ height: '100%', width: '100%' }}>
-          <TileLayer
-            attribution='&copy; OpenStreetMap contributors'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
+          <TileLayer attribution={CARTO_ATTRIBUTION} url={cartoVoyagerUrl()} />
 
           {data.depot && (
             <Marker position={[data.depot.lat, data.depot.lng]} icon={depotIcon}>

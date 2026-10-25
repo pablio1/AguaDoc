@@ -13,6 +13,7 @@ import {
   apiPostRiderLocation,
   apiGetRiderRoute,
 } from '../api';
+import { CARTO_ATTRIBUTION, cartoDarkUrl } from '../lib/mapTiles';
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -231,10 +232,7 @@ export default function RiderDashboard({ user, onLogout }) {
           zoomControl={false}
           style={{ height: '100%', width: '100%', background: '#0b1628' }}
         >
-          <TileLayer
-            attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-          />
+          <TileLayer attribution={CARTO_ATTRIBUTION} url={cartoDarkUrl()} />
           <FitBounds points={fitPoints} />
           {gps && <Recenter lat={gps.lat} lng={gps.lng} />}
           {gps && (

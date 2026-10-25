@@ -6,6 +6,7 @@ import 'leaflet/dist/leaflet.css';
 import { apiGetOrders, apiUpdateUser, apiAcceptTerms, apiGetNotifications, apiMarkNotificationRead, apiMarkAllNotificationsRead, apiGetRiderLocation } from '../api';
 import RequestServicePage from './RequestServicePage';
 import { TermsModal, TermsGate, TERMS_VERSION } from '../components/TermsContent';
+import { CARTO_ATTRIBUTION, cartoVoyagerUrl } from '../lib/mapTiles';
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -563,7 +564,7 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
                                 <div className="mt-2">
                                   <div className="h-52 rounded-xl overflow-hidden border border-gray-200">
                                     <MapContainer center={center} zoom={14} style={{ height: '100%', width: '100%' }}>
-                                      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                                      <TileLayer attribution={CARTO_ATTRIBUTION} url={cartoVoyagerUrl()} />
                                       {homePos && (
                                         <Marker position={homePos} icon={homeIcon}><Popup>Your delivery address</Popup></Marker>
                                       )}
