@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import Modal from '../components/ui/Modal';
 import { showToast } from '../components/ui/Toast';
-import { apiUpdateOrder, apiAddOrder } from '../api';
+import { apiUpdateOrder, apiAddOrder, apiAssignRider } from '../api';
 
 const PRICE = 40;
 
@@ -12,16 +12,22 @@ export default function OrdersPage() {
   const [filter, setFilter]           = useState('All');
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [showRouteModal, setShowRouteModal] = useState(false);
+  const [assignOrder, setAssignOrder] = useState(null); // order being assigned
+  const [selectedRiderId, setSelectedRiderId] = useState('');
+  const [assigning, setAssigning] = useState(false);
   const [form, setForm] = useState({
     custId: '', type: 'Delivery', gallons: 1,
     date: new Date().toISOString().slice(0, 10),
   });
 
+  const riders = (state.users || []).filter(u => u.role === 'rider');
+
   // ── Filter ──
   const filtered = (state.orders || []).filter(o => {
-    if (['Pending', 'Processing', 'Delivered', 'Cancelled'].includes(filter)) return o.status === filter;
+    if (['Pending', 'Assigned', 'Processing', 'Out for Delivery', 'Delivered', 'Cancelled'].includes(filter)) return o.status === filter;
     if (filter === 'Delivery') return o.type === 'Delivery';
     if (filter === 'Walk-in')  return o.type === 'Walk-in / Pickup';
+    if (filter === 'Unassigned') return o.type === 'Delivery' && !o.riderId && !['Delivered', 'Cancelled', 'Ready to Go'].includes(o.status);
     return true;
   });
 
@@ -78,6 +84,42 @@ export default function OrdersPage() {
     }
   }
 
+  function openAssign(o) {
+    setAssignOrder(o);
+    setSelectedRiderId(o.riderId || '');
+  }
+
+  async function handleAssignRider() {
+    if (!assignOrder || !selectedRiderId) {
+      showToast('⚠ Select a rider.');
+      return;
+    }
+    setAssigning(true);
+    try {
+      const updated = await apiAssignRider(assignOrder.id, selectedRiderId);
+      dispatch({ type: 'UPDATE_ORDER', payload: updated });
+      const name = riders.find(r => String(r.id) === String(selectedRiderId))?.fullName || 'rider';
+      showToast(`🛵 Assigned ${assignOrder.ref || assignOrder.id} to ${name}`);
+      setAssignOrder(null);
+      setSelectedRiderId('');
+    } catch (e) {
+      showToast(`❌ ${e.message || 'Failed to assign rider.'}`);
+    } finally {
+      setAssigning(false);
+    }
+  }
+
+  function getRiderName(o) {
+    if (o.riderName) return o.riderName;
+    if (!o.riderId) return null;
+    const rider = riders.find(r => String(r.id) === String(o.riderId));
+    return rider?.fullName || rider?.username || 'Rider';
+  }
+
+  function canAssignRider(o) {
+    return o.type === 'Delivery' && !['Delivered', 'Cancelled', 'Ready to Go'].includes(o.status);
+  }
+
   // ── Place new order (admin side) ──
   async function handlePlaceOrder() {
     if (!form.custId) { showToast('⚠ Select a customer.'); return; }
@@ -109,6 +151,7 @@ export default function OrdersPage() {
   const statusBadge = {
     'Delivered':          'bg-green-100 text-green-800',
     'Ready to Go':        'bg-green-100 text-green-700',
+    'Assigned':           'bg-indigo-100 text-indigo-800',
     'Accepted':           'bg-sky-100 text-sky-800',
     'Out for Delivery':   'bg-emerald-100 text-emerald-800',
     'Processing':         'bg-blue-100 text-blue-800',
@@ -122,7 +165,7 @@ export default function OrdersPage() {
     'Walk-in':         'bg-green-50 text-green-700',
   };
 
-  const tabs = ['All', 'Pending', 'Processing', 'Delivered', 'Cancelled', 'Delivery', 'Walk-in'];
+  const tabs = ['All', 'Unassigned', 'Pending', 'Assigned', 'Out for Delivery', 'Processing', 'Delivered', 'Cancelled', 'Delivery', 'Walk-in'];
 
   return (
     <div>
@@ -132,7 +175,7 @@ export default function OrdersPage() {
         <div className="flex justify-between items-start mb-4">
           <div>
             <div className="text-[15px] font-bold">📋 Order Management</div>
-            <div className="text-xs text-gray-500 mt-0.5">Track walk-in, schedule deliveries, manage statuses.</div>
+            <div className="text-xs text-gray-500 mt-0.5">Assign riders to deliveries, track statuses.</div>
           </div>
           <div className="flex gap-2">
             <button
@@ -171,7 +214,7 @@ export default function OrdersPage() {
         <table className="w-full text-[13px] border-collapse">
           <thead className="sticky top-0 bg-white z-10">
             <tr>
-              {['Order ID', 'Customer', 'Type', 'Gallons', 'Amount', 'Payment', 'Date', 'Status', 'Actions'].map(h => (
+              {['Order ID', 'Customer', 'Type', 'Gallons', 'Amount', 'Payment', 'Rider', 'Date', 'Status', 'Actions'].map(h => (
                 <th key={h} className="text-left px-2.5 py-2 text-[11.5px] font-semibold text-gray-500 border-b-2 border-gray-200 whitespace-nowrap">
                   {h}
                 </th>
@@ -180,7 +223,7 @@ export default function OrdersPage() {
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={9} className="text-center py-6 text-gray-400 text-xs">No orders found.</td></tr>
+              <tr><td colSpan={10} className="text-center py-6 text-gray-400 text-xs">No orders found.</td></tr>
             ) : (
               filtered.map(o => (
                 <tr key={o.id} className="hover:bg-gray-50 border-b border-gray-100 last:border-b-0">
@@ -214,6 +257,17 @@ export default function OrdersPage() {
                       </span>
                     )}
                   </td>
+                  <td className="px-2.5 py-2.5">
+                    {getRiderName(o) ? (
+                      <span className="inline-flex items-center gap-1 text-[12px] font-medium text-indigo-700">
+                        🛵 {getRiderName(o)}
+                      </span>
+                    ) : o.type === 'Delivery' ? (
+                      <span className="text-[11.5px] text-amber-600 font-semibold">Unassigned</span>
+                    ) : (
+                      <span className="text-gray-300">—</span>
+                    )}
+                  </td>
                   <td className="px-2.5 py-2.5 text-gray-500">
                     {o.date ? new Date(o.date).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                   </td>
@@ -223,7 +277,15 @@ export default function OrdersPage() {
                     </span>
                   </td>
                   <td className="px-2.5 py-2.5">
-                    <div className="flex gap-1">
+                    <div className="flex gap-1 flex-wrap">
+                      {canAssignRider(o) && (
+                        <button
+                          onClick={() => openAssign(o)}
+                          className="bg-indigo-500 text-white text-[11px] font-semibold px-2 py-1 rounded cursor-pointer hover:bg-indigo-600"
+                        >
+                          {o.riderId ? '↻ Reassign' : '🛵 Assign'}
+                        </button>
+                      )}
                       {o.status === 'Pending' && (
                         <button
                           onClick={() => handleMarkProcessing(o)}
@@ -232,7 +294,7 @@ export default function OrdersPage() {
                           ⚙ Process
                         </button>
                       )}
-                      {o.status === 'Processing' && (
+                      {(o.status === 'Processing' || o.status === 'Assigned' || o.status === 'Out for Delivery') && (
                         <button
                           onClick={() => handleMarkDone(o)}
                           className="bg-green-600 text-white text-[11px] font-semibold px-2 py-1 rounded cursor-pointer hover:bg-green-700"
@@ -355,6 +417,52 @@ export default function OrdersPage() {
               className="px-4 py-2 bg-accent text-white rounded-lg text-[12.5px] font-semibold hover:bg-accent2 cursor-pointer"
             >
               📤 Send to Driver
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Assign Rider Modal ── */}
+      {assignOrder && (
+        <Modal title="🛵 Assign Rider" onClose={() => { setAssignOrder(null); setSelectedRiderId(''); }}>
+          <p className="text-[13px] text-gray-500 mb-3">
+            Assign a rider to deliver <span className="font-semibold text-gray-700">{assignOrder.ref || assignOrder.id}</span>
+            {' '}for <span className="font-semibold text-gray-700">{getCustomerName(assignOrder)}</span>.
+          </p>
+          {assignOrder.address && (
+            <p className="text-xs text-gray-400 mb-3">📍 {assignOrder.address}</p>
+          )}
+          <label className="block text-[12.5px] font-semibold mb-1">Select Rider</label>
+          <select
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] outline-none focus:border-accent mb-3"
+            value={selectedRiderId}
+            onChange={e => setSelectedRiderId(e.target.value)}
+          >
+            <option value="">-- Choose rider --</option>
+            {riders.map(r => (
+              <option key={r.id} value={r.id}>
+                {r.fullName || r.username} ({r.phone || r.email || 'no contact'})
+              </option>
+            ))}
+          </select>
+          {riders.length === 0 && (
+            <p className="text-xs text-amber-600 mb-3">
+              No rider accounts found. Create a user with role <strong>rider</strong> first (seed: rider / rider123).
+            </p>
+          )}
+          <div className="flex gap-2 justify-end mt-2">
+            <button
+              onClick={() => { setAssignOrder(null); setSelectedRiderId(''); }}
+              className="px-4 py-2 border border-gray-200 rounded-lg text-[12.5px] font-semibold hover:bg-gray-50 cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleAssignRider}
+              disabled={assigning || !selectedRiderId}
+              className="px-4 py-2 bg-indigo-500 text-white rounded-lg text-[12.5px] font-semibold hover:bg-indigo-600 cursor-pointer disabled:opacity-50"
+            >
+              {assigning ? 'Assigning…' : 'Confirm Assign'}
             </button>
           </div>
         </Modal>

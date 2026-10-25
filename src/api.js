@@ -81,6 +81,15 @@ export async function apiUpdateOrder(id, data) {
   });
   return res.json();
 }
+export async function apiAssignRider(orderId, riderId) {
+  const res = await fetch(`${BASE}/orders/${orderId}/assign-rider`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ riderId }),
+  });
+  const result = await res.json();
+  if (!res.ok) throw new Error(result.message || 'Failed to assign rider');
+  return result;
+}
 export async function apiGetDeliveryRoute() {
   const res = await fetch(`${BASE}/delivery-route`);
   return res.json();
@@ -90,15 +99,6 @@ export async function apiGetDeliveryRoute() {
 export async function apiGetRiderBookings(riderId) {
   const res = await fetch(`${BASE}/rider/bookings?riderId=${encodeURIComponent(riderId)}`);
   return res.json();
-}
-export async function apiAcceptRiderBooking(orderId, riderId) {
-  const res = await fetch(`${BASE}/rider/bookings/${orderId}/accept`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ riderId }),
-  });
-  const result = await res.json();
-  if (!res.ok) throw new Error(result.message || 'Could not accept booking');
-  return result;
 }
 export async function apiUpdateRiderBookingStatus(orderId, riderId, status) {
   const res = await fetch(`${BASE}/rider/bookings/${orderId}/status`, {

@@ -8,7 +8,6 @@ import {
 } from 'lucide-react';
 import {
   apiGetRiderBookings,
-  apiAcceptRiderBooking,
   apiUpdateRiderBookingStatus,
   apiPostRiderLocation,
   apiGetRiderRoute,
@@ -69,6 +68,7 @@ function formatKm(meters) {
 
 const STATUS_PILL = {
   Pending: 'bg-amber-400/20 text-amber-100 ring-1 ring-amber-300/30',
+  Assigned: 'bg-indigo-400/20 text-indigo-100 ring-1 ring-indigo-300/30',
   Accepted: 'bg-sky-400/20 text-sky-100 ring-1 ring-sky-300/30',
   Processing: 'bg-sky-400/20 text-sky-100 ring-1 ring-sky-300/30',
   'Out for Delivery': 'bg-emerald-400/20 text-emerald-100 ring-1 ring-emerald-300/30',
@@ -76,8 +76,7 @@ const STATUS_PILL = {
 };
 
 export default function RiderDashboard({ user, onLogout }) {
-  const [tab, setTab] = useState('available'); // available | active | history
-  const [available, setAvailable] = useState([]);
+  const [tab, setTab] = useState('active'); // active | history
   const [mine, setMine] = useState([]);
   const [done, setDone] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -99,7 +98,6 @@ export default function RiderDashboard({ user, onLogout }) {
   const load = useCallback(async () => {
     try {
       const data = await apiGetRiderBookings(user.id);
-      setAvailable(Array.isArray(data.available) ? data.available : []);
       setMine(Array.isArray(data.mine) ? data.mine : []);
       setDone(Array.isArray(data.done) ? data.done : []);
     } catch {
@@ -183,21 +181,6 @@ export default function RiderDashboard({ user, onLogout }) {
     return () => { cancelled = true; };
   }, [gps, activeOrder?.id, activeOrder?.lat, activeOrder?.lng]);
 
-  async function accept(order) {
-    setBusyId(order.id);
-    try {
-      await apiAcceptRiderBooking(order.id, user.id);
-      showToast(`Accepted ${order.ref}`);
-      setTab('active');
-      setActiveId(order.id);
-      await load();
-    } catch (e) {
-      showToast(e.message, 'err');
-    } finally {
-      setBusyId(null);
-    }
-  }
-
   async function setStatus(order, status) {
     setBusyId(order.id);
     try {
@@ -212,7 +195,7 @@ export default function RiderDashboard({ user, onLogout }) {
     }
   }
 
-  const list = tab === 'available' ? available : tab === 'active' ? mine : done;
+  const list = tab === 'active' ? mine : done;
   const mapCenter = gps ? [gps.lat, gps.lng] : activeOrder?.lat ? [activeOrder.lat, activeOrder.lng] : DEPOT;
   const fitPoints = [
     gps ? [gps.lat, gps.lng] : null,
@@ -338,8 +321,7 @@ export default function RiderDashboard({ user, onLogout }) {
           {/* Tabs */}
           <div className="flex gap-1 px-3 pt-3">
             {[
-              { id: 'available', label: 'Available', count: available.length, icon: Package },
-              { id: 'active', label: 'My runs', count: mine.length, icon: Navigation },
+              { id: 'active', label: 'Assigned to me', count: mine.length, icon: Navigation },
               { id: 'history', label: 'Done', count: done.length, icon: CheckCircle2 },
             ].map(({ id, label, count, icon: Icon }) => (
               <button
@@ -367,8 +349,7 @@ export default function RiderDashboard({ user, onLogout }) {
               <div className="py-10 text-center">
                 <MapPin className="mx-auto mb-2 text-white/25" size={28} />
                 <p className="text-sm text-white/45">
-                  {tab === 'available' && 'No open bookings right now'}
-                  {tab === 'active' && 'Accept a booking to start delivering'}
+                  {tab === 'active' && 'No deliveries assigned yet — wait for admin'}
                   {tab === 'history' && 'No completed deliveries yet'}
                 </p>
               </div>
@@ -424,18 +405,6 @@ export default function RiderDashboard({ user, onLogout }) {
                       >
                         <Phone size={13} /> Call
                       </a>
-                    )}
-
-                    {tab === 'available' && (
-                      <button
-                        type="button"
-                        disabled={busyId === order.id}
-                        onClick={() => accept(order)}
-                        className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-teal-500 px-3 py-2 text-xs font-bold text-white shadow-md shadow-cyan-500/25 disabled:opacity-60"
-                      >
-                        <Bike size={14} />
-                        {busyId === order.id ? 'Accepting…' : 'Accept booking'}
-                      </button>
                     )}
 
                     {tab === 'active' && order.status !== 'Out for Delivery' && order.status !== 'Delivered' && (
