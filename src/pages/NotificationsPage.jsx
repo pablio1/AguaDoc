@@ -70,7 +70,7 @@ export default function NotificationsPage() {
 
   return (
     <div>
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
+      <div className="agua-card p-4">
 
         {/* Header */}
         <div className="flex items-start justify-between mb-4">

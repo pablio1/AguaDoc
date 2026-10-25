@@ -242,7 +242,7 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
   const recentOrders = [...orders].reverse().slice(0, 10);
 
   return (
-    <div className="flex h-screen bg-[#f0f6fb] overflow-hidden">
+    <div className="flex h-screen overflow-hidden bg-bg">
 
       {/* Accounts created before the credit terms existed must accept them once */}
       {!user?.termsAcceptedAt && (
@@ -265,92 +265,100 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
       {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
 
       {/* Sidebar (desktop/tablet only — mobile uses the bottom nav bar instead) */}
-      <aside className="hidden md:flex w-52 bg-[#0f2a4a] flex-col py-6 px-4 shrink-0">
-        <div className="flex items-center gap-2 mb-10 px-1">
-          <div className="w-8 h-8 bg-[#0ea5c9] rounded-lg flex items-center justify-center">
-            <span className="text-white text-sm">💧</span>
+      <aside className="agua-dark-mesh hidden w-60 shrink-0 flex-col px-4 py-6 md:flex">
+        <div className="mb-8 px-1">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 to-teal-600 text-lg shadow-lg shadow-cyan-500/30">
+              💧
+            </div>
+            <div>
+              <p className="font-display text-lg font-bold tracking-tight text-white">AguaDoc</p>
+              <p className="text-[11px] text-white/45">Customer portal</p>
+            </div>
           </div>
-          <span className="text-white font-bold text-base">AguaDoc.</span>
         </div>
-        <nav className="flex flex-col gap-1 flex-1">
+        <nav className="flex flex-1 flex-col gap-1">
           {NAV.map(({ icon: Icon, label, id }) => (
-            <button key={id} onClick={() => setActive(id)}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition text-left
-                ${active === id ? 'bg-[#0ea5c9] text-white' : 'text-gray-300 hover:bg-white/10'}`}>
+            <button key={id} type="button" onClick={() => setActive(id)}
+              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition
+                ${active === id
+                  ? 'bg-gradient-to-r from-cyan-400/25 to-teal-500/10 text-cyan-100 ring-1 ring-cyan-300/25'
+                  : 'text-white/55 hover:bg-white/8 hover:text-white'}`}>
               <Icon size={16} />{label}
             </button>
           ))}
         </nav>
 
-        {/* Sign Out pinned to bottom of sidebar */}
         <button
+          type="button"
           onClick={onLogout}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-300 hover:bg-red-500/20 hover:text-red-400 transition mt-2"
+          className="mt-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-white/50 transition hover:bg-rose-500/15 hover:text-rose-200"
         >
-          <LogOut size={16} /> Sign Out
+          <LogOut size={16} /> Sign out
         </button>
       </aside>
 
       {/* Main */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
 
         {/* Topbar */}
-        <header className="relative bg-white border-b border-gray-100 px-3 sm:px-6 py-3 flex items-center gap-2 sm:gap-4">
-          <div className="flex items-center gap-2 flex-1 bg-gray-50 rounded-xl px-3 sm:px-4 py-2 min-w-0 sm:max-w-sm">
-            <span className="text-gray-400 text-sm shrink-0">🔍</span>
-            <input placeholder="Search orders..." className="bg-transparent text-sm outline-none flex-1 min-w-0 text-gray-500" />
+        <header className="relative flex items-center gap-2 border-b border-slate-200/70 bg-white/75 px-3 py-3 backdrop-blur-xl sm:gap-4 sm:px-6">
+          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-200/80 bg-foam/80 px-3 py-2 sm:max-w-sm sm:px-4">
+            <span className="shrink-0 text-sm text-slate-400">🔍</span>
+            <input placeholder="Search orders…" className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-slate-400" />
           </div>
           <button
+            type="button"
             onClick={() => setShowTerms(true)}
             title="Terms & Agreement (credit / utang)"
-            className="text-gray-400 hover:text-[#0ea5c9] shrink-0"
+            className="shrink-0 rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-accent"
           >
-            <Info size={20} />
+            <Info size={18} />
           </button>
           <button
-            onClick={() => setShowNotifs(v => !v)}
-            className="relative text-gray-400 hover:text-gray-600 shrink-0"
+            type="button"
+            onClick={() => setShowNotifs((v) => !v)}
+            className="relative shrink-0 rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-ink"
           >
-            <Bell size={20} />
+            <Bell size={18} />
             {unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-white text-[9px] flex items-center justify-center">
+              <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] text-white">
                 {unreadCount}
               </span>
             )}
           </button>
-          {/* Sidebar is hidden on mobile, so its Sign Out button needs a stand-in here */}
           <button
+            type="button"
             onClick={onLogout}
-            className="md:hidden shrink-0 text-gray-400 hover:text-red-500"
+            className="shrink-0 rounded-xl p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-500 md:hidden"
           >
-            <LogOut size={20} />
+            <LogOut size={18} />
           </button>
 
           {showNotifs && (
             <>
-              {/* click-away backdrop */}
               <div className="fixed inset-0 z-10" onClick={() => setShowNotifs(false)} />
-              <div className="absolute right-3 sm:right-6 top-14 w-[90vw] max-w-80 bg-white border border-gray-200 rounded-xl shadow-lg z-20 overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100">
+              <div className="absolute right-3 top-14 z-20 w-[90vw] max-w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl sm:right-6">
+                <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
                   <span className="text-[13px] font-bold">Notifications</span>
                   {unreadCount > 0 && (
-                    <button onClick={handleMarkAllNotifsRead} className="text-[11.5px] text-[#0ea5c9] font-semibold hover:underline">
+                    <button type="button" onClick={handleMarkAllNotifsRead} className="text-[11.5px] font-semibold text-accent2 hover:underline">
                       Mark all read
                     </button>
                   )}
                 </div>
                 <div className="max-h-80 overflow-y-auto">
                   {notifications.length === 0 ? (
-                    <div className="text-center text-gray-400 text-xs py-6">No notifications yet.</div>
-                  ) : notifications.map(n => (
+                    <div className="py-6 text-center text-xs text-slate-400">No notifications yet.</div>
+                  ) : notifications.map((n) => (
                     <div
                       key={n.id}
                       onClick={() => handleMarkNotifRead(n)}
-                      className={`px-4 py-2.5 border-b border-gray-50 last:border-b-0 cursor-pointer hover:bg-gray-50
-                        ${n.read ? '' : 'bg-blue-50'}`}
+                      className={`cursor-pointer border-b border-slate-50 px-4 py-2.5 last:border-b-0 hover:bg-slate-50
+                        ${n.read ? '' : 'bg-cyan-50/70'}`}
                     >
-                      <p className="text-[12.5px] text-gray-700">{n.message}</p>
-                      <p className="text-[11px] text-gray-400 mt-0.5">{timeAgo(n.createdAt)}</p>
+                      <p className="text-[12.5px] text-slate-700">{n.message}</p>
+                      <p className="mt-0.5 text-[11px] text-slate-400">{timeAgo(n.createdAt)}</p>
                     </div>
                   ))}
                 </div>
@@ -360,7 +368,7 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
         </header>
 
         {/* Content */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 pb-24 md:pb-6">
+        <main className="agua-mesh flex-1 space-y-5 overflow-y-auto p-4 pb-24 sm:p-6 md:pb-6">
 
           {checkoutBanner && (
             <div className={`rounded-xl px-4 py-3 text-sm font-medium flex items-center justify-between
@@ -411,42 +419,42 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
               )}
 
               {/* Welcome banner */}
-              <div className="bg-[#0f2a4a] rounded-2xl px-5 sm:px-6 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                  <h2 className="text-white text-lg font-semibold">Good day, {firstName}! 👋</h2>
-                  <p className="text-gray-400 text-sm mt-0.5">Here's a summary of your interactions and orders.</p>
+              <div className="agua-dark-mesh flex flex-col gap-4 rounded-[1.5rem] px-5 py-6 shadow-xl shadow-slate-900/10 sm:flex-row sm:items-center sm:justify-between sm:px-7">
+                <div className="agua-fade-up">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200/70">Customer dashboard</p>
+                  <h2 className="mt-1 font-display text-2xl font-bold tracking-tight text-white">Good day, {firstName}</h2>
+                  <p className="mt-1 text-sm text-white/55">Your orders, deliveries, and account in one place.</p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-[#0ea5c9] flex items-center justify-center text-white font-bold text-sm shrink-0">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-teal-600 text-sm font-bold text-white shadow-lg shadow-cyan-500/30">
                     {initials}
                   </div>
-                  <div className="text-sm min-w-0">
-                    <p className="text-white font-medium truncate">{user?.username || user?.fullName}</p>
-                    <p className="text-gray-400 text-xs truncate">{user?.email}</p>
+                  <div className="min-w-0 text-sm">
+                    <p className="truncate font-semibold text-white">{user?.username || user?.fullName}</p>
+                    <p className="truncate text-xs text-white/45">{user?.email}</p>
                   </div>
-                  {/* Hidden on mobile — the header already has a Sign Out icon there */}
-                  <button onClick={onLogout}
-                    className="hidden sm:flex items-center gap-1.5 text-gray-300 hover:text-white text-sm ml-4 border border-white/20 rounded-lg px-3 py-1.5 transition shrink-0">
-                    <LogOut size={14} /> Sign Out
+                  <button type="button" onClick={onLogout}
+                    className="ml-2 hidden shrink-0 items-center gap-1.5 rounded-xl border border-white/15 px-3 py-2 text-sm text-white/70 transition hover:bg-white/10 hover:text-white sm:flex">
+                    <LogOut size={14} /> Sign out
                   </button>
                 </div>
               </div>
 
               {/* Stats */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+              <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
                 {STATS.map(({ emoji, label, key }) => (
-                  <div key={key} className="bg-white rounded-2xl px-5 py-5 shadow-sm">
-                    <div className="text-2xl mb-3">{emoji}</div>
-                    <p className="text-xs text-gray-400 font-semibold tracking-wide">{label}</p>
-                    <p className="text-2xl font-bold text-[#0f172a] mt-1">
-                      {loading ? '...' : stats[key]}
+                  <div key={key} className="agua-card px-5 py-5 transition hover:-translate-y-0.5 hover:shadow-lg">
+                    <div className="mb-3 text-2xl">{emoji}</div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">{label}</p>
+                    <p className="mt-1 font-display text-2xl font-bold text-ink">
+                      {loading ? '…' : stats[key]}
                     </p>
                   </div>
                 ))}
               </div>
 
               {/* Recent Activity */}
-              <div className="bg-white rounded-2xl shadow-sm p-5">
+              <div className="agua-card p-5">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-semibold text-[#0f172a]">Recent Service & Order Activity</h3>
                   <button
@@ -507,9 +515,9 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
               </div>
 
               {loading ? (
-                <div className="bg-white rounded-2xl shadow-sm p-10 text-center text-gray-400">Loading...</div>
+                <div className="agua-card p-10 text-center text-gray-400">Loading...</div>
               ) : orders.length === 0 ? (
-                <div className="bg-white rounded-2xl shadow-sm p-10 text-center">
+                <div className="agua-card p-10 text-center">
                   <div className="text-4xl mb-3">📦</div>
                   <p className="text-gray-500 font-medium">No orders yet</p>
                   <p className="text-gray-400 text-sm mt-1">Place your first order to get started.</p>
@@ -566,7 +574,7 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
                   };
 
                   return (
-                    <div key={order.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                    <div key={order.id} className="agua-card p-5">
                       {/* Order header */}
                       <div className="flex items-start justify-between mb-4">
                         <div>
@@ -729,7 +737,7 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
           
           {/* ── Billing History ── */}
           {active === 'billing' && (
-            <div className="bg-white rounded-2xl shadow-sm p-5">
+            <div className="agua-card p-5">
               <h3 className="font-semibold text-[#0f172a] mb-4">Billing History</h3>
               <p className="text-gray-400 text-sm text-center py-8">No billing records yet...</p>
             </div>
@@ -739,7 +747,7 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
           {active === 'profile' && (
             <div className="max-w-xl space-y-5">
               {/* Profile header card */}
-              <div className="bg-white rounded-2xl shadow-sm p-5 flex items-center gap-4">
+              <div className="agua-card p-5 flex items-center gap-4">
                 <div className="w-14 h-14 rounded-full bg-[#0ea5c9] flex items-center justify-center text-white font-bold text-xl shrink-0">
                   {initials}
                 </div>
@@ -749,7 +757,7 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
                 </div>
               </div>
 
-              <form onSubmit={handleProfileSave} className="bg-white rounded-2xl shadow-sm p-5 space-y-4">
+              <form onSubmit={handleProfileSave} className="agua-card p-5 space-y-4">
                 <h3 className="font-semibold text-[#0f172a]">Profile Information</h3>
 
                 {profileMsg && (
@@ -848,16 +856,19 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
         </main>
 
         {/* Bottom nav (mobile/tablet only — desktop uses the sidebar instead) */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex items-stretch z-30">
+        <nav className="fixed bottom-0 left-0 right-0 z-30 flex items-stretch border-t border-slate-200/80 bg-white/90 backdrop-blur-xl md:hidden">
           {NAV.map(({ icon: Icon, label, id }) => (
             <button
               key={id}
+              type="button"
               onClick={() => setActive(id)}
-              className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 text-[10px] font-medium
-                ${active === id ? 'text-[#0ea5c9]' : 'text-gray-400'}`}
+              className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 text-[10px] font-semibold transition
+                ${active === id ? 'text-accent2' : 'text-slate-400'}`}
             >
-              <Icon size={18} />
-              <span className="leading-none text-center">{label.split(' ')[0]}</span>
+              <span className={`rounded-xl p-1.5 ${active === id ? 'bg-cyan-50 text-accent2' : ''}`}>
+                <Icon size={18} />
+              </span>
+              <span className="text-center leading-none">{label.split(' ')[0]}</span>
             </button>
           ))}
         </nav>

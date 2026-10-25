@@ -374,11 +374,11 @@ export default function RequestServicePage({ user, onOrderPlaced }) {
     <div className="max-w-2xl mx-auto">
       {/* Header */}
       <div className="mb-5">
-        <h2 className="text-lg font-bold text-[#0f172a]">Request an Order</h2>
-        <p className="text-sm text-gray-400">Fill out the {isWalkin ? '2' : '3'}-step form below</p>
+        <h2 className="font-display text-xl font-bold tracking-tight text-ink">Request an Order</h2>
+        <p className="text-sm text-muted">Fill out the {isWalkin ? '2' : '3'}-step form below</p>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm p-6">
+      <div className="agua-card p-6">
         <StepBar step={step} isWalkin={isWalkin} />
 
         {/* ── STEP 1: Order Type ── */}

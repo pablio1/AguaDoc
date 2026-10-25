@@ -75,7 +75,7 @@ export default function DeliveryRoutePage() {
   return (
     <div className="flex h-full gap-4">
       {/* Sidebar: ordered stop list */}
-      <div className="w-80 shrink-0 bg-white rounded-2xl shadow-sm p-4 overflow-y-auto">
+      <div className="agua-card w-80 shrink-0 overflow-y-auto p-4">
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-semibold text-[#0f172a]">Delivery Route</h2>
           <button

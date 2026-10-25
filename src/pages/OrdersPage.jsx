@@ -182,7 +182,7 @@ export default function OrdersPage() {
 
   return (
     <div>
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
+      <div className="agua-card p-4">
 
         {/* Header */}
         <div className="flex justify-between items-start mb-4 gap-3 flex-wrap">

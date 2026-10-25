@@ -246,10 +246,10 @@ export default function RiderDashboard({ user, onLogout }) {
               <Bike size={20} />
             </div>
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold tracking-tight">{user.fullName || 'Rider'}</p>
+              <p className="truncate font-display text-sm font-bold tracking-tight">{user.fullName || 'Rider'}</p>
               <p className="flex items-center gap-1 text-[11px] text-white/50">
                 <span className={`inline-block h-1.5 w-1.5 rounded-full ${sharing ? 'bg-emerald-400 animate-pulse' : 'bg-white/30'}`} />
-                {sharing ? 'Live location sharing' : 'Location idle'}
+                {sharing ? 'Live location sharing' : 'Location idle'} · AguaDoc Rider
               </p>
             </div>
           </div>

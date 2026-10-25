@@ -68,7 +68,7 @@ const debtorCount    = state.customers.filter(c => parseFloat(c.balance) > 0).le
 
   return (
     <div>
-      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
+      <div className="agua-card p-4 mb-4">
 
         {/* Header */}
         <div className="flex justify-between items-start mb-4">

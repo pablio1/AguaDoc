@@ -129,7 +129,7 @@ export default function PredictionsPage() {
     <div>
 
       {/* Sales Prediction Card */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-3.5">
+      <div className="agua-card p-4 mb-3.5">
         <div className="text-[15px] font-bold">📈 Sales Prediction</div>
         <div className="text-xs text-gray-500 mt-0.5 mb-3">
           Forecast based on your last {HISTORY_DAYS} days of actual delivered orders (moving average + trend line) — not a trained ML model.
@@ -161,7 +161,7 @@ export default function PredictionsPage() {
       </div>
 
       {/* Debt Risk Table */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
+      <div className="agua-card p-4">
         <div className="text-[15px] font-bold">⚠ Debt Risk Prediction</div>
         <div className="text-xs text-gray-500 mt-0.5 mb-3">Customers likely to default on payment</div>
         <table className="w-full text-[13px] border-collapse">

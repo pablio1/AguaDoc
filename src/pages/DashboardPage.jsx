@@ -174,50 +174,52 @@ export default function DashboardPage() {
     <div>
 
       {/* ── Welcome Banner ── */}
-      <div className="bg-gradient-to-r from-navy to-[#1a3a6b] rounded-xl px-6 py-4 text-white flex items-center justify-between mb-4">
+      <div className="agua-dark-mesh mb-4 flex flex-col gap-4 rounded-[1.5rem] px-6 py-5 text-white shadow-xl shadow-slate-900/10 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-base font-bold">Welcome back, Admin! 👋</h2>
-          <p className="text-xs text-white/70 mt-0.5">Here's what's happening in AguaDoc today.</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-200/70">Operations</p>
+          <h2 className="mt-1 font-display text-xl font-bold tracking-tight">Welcome back, Admin</h2>
+          <p className="mt-0.5 text-xs text-white/55">Live pulse of sales, debt, and inventory.</p>
         </div>
         <button
+          type="button"
           onClick={() => navigate('/reports')}
-          className="bg-accent hover:bg-accent2 text-white text-xs font-semibold px-4 py-2 rounded-lg transition cursor-pointer"
+          className="agua-btn agua-btn-primary cursor-pointer text-xs"
         >
-          📈 Generate Report
+          Generate Report
         </button>
       </div>
 
       {/* ── 4 Stat Cards ── */}
-      <div className="grid grid-cols-4 gap-3 mb-4">
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
 
-        <div className="bg-white rounded-xl border border-gray-200 p-3.5">
-          <div className="text-xs text-gray-500 mb-1">Total Sales (This Week)</div>
-          <div className="text-[22px] font-black text-gray-800">₱{totalSales}</div>
-          <span className={`inline-block text-[11px] px-2 py-0.5 rounded-full font-semibold mt-1
+        <div className="agua-card p-4">
+          <div className="mb-1 text-xs text-muted">Total Sales (This Week)</div>
+          <div className="font-display text-[22px] font-bold text-ink">₱{totalSales}</div>
+          <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold
             ${weekChangePct >= 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
             {weekChangePct >= 0 ? '+' : ''}{weekChangePct}% vs last week
           </span>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-3.5">
-          <div className="text-xs text-gray-500 mb-1">Outstanding Debt</div>
-          <div className="text-[22px] font-black text-gray-800">₱{totalDebt}</div>
-          <span className="inline-block text-[11px] px-2 py-0.5 rounded-full font-semibold mt-1 bg-red-100 text-red-800">
+        <div className="agua-card p-4">
+          <div className="mb-1 text-xs text-muted">Outstanding Debt</div>
+          <div className="font-display text-[22px] font-bold text-ink">₱{totalDebt}</div>
+          <span className="mt-1 inline-block rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-800">
             Needs attention
           </span>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-3.5">
-          <div className="text-xs text-gray-500 mb-1">Pending Orders</div>
-          <div className="text-[22px] font-black text-gray-800">{pendingOrders}</div>
-          <span className="inline-block text-[11px] px-2 py-0.5 rounded-full font-semibold mt-1 bg-blue-100 text-blue-800">
+        <div className="agua-card p-4">
+          <div className="mb-1 text-xs text-muted">Pending Orders</div>
+          <div className="font-display text-[22px] font-bold text-ink">{pendingOrders}</div>
+          <span className="mt-1 inline-block rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-800">
             Active
           </span>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-3.5">
-          <div className="text-xs text-gray-500 mb-1">Available Gallons</div>
-          <div className="text-[22px] font-black text-gray-800">{availGallons}</div>
+        <div className="agua-card p-4">
+          <div className="mb-1 text-xs text-muted">Available Gallons</div>
+          <div className="font-display text-[22px] font-bold text-ink">{availGallons}</div>
           <span className={`inline-block text-[11px] px-2 py-0.5 rounded-full font-semibold mt-1
             ${availGallons < 50 ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
             {availGallons < 50 ? '⚠ Low Stock' : '✓ Good'}
@@ -230,9 +232,9 @@ export default function DashboardPage() {
       <div className="grid grid-cols-[3fr_2fr] gap-3.5 mb-3.5">
 
         {/* Sales Chart */}
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="text-[15px] font-bold">📈 Sales Prediction vs Actual</div>
-          <div className="text-xs text-gray-500 mt-0.5 mb-3">Actual daily sales vs. this week's trend line, based on real orders</div>
+        <div className="agua-card p-4">
+          <div className="font-display text-[15px] font-bold">Sales Prediction vs Actual</div>
+          <div className="mb-3 mt-0.5 text-xs text-muted">Actual daily sales vs. this week's trend line, based on real orders</div>
           <div className="relative h-[200px]">
             <canvas ref={canvasRef} />
           </div>
@@ -249,8 +251,8 @@ export default function DashboardPage() {
         </div>
 
         {/* System Alerts */}
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="text-[15px] font-bold mb-3">⚠ System Alerts</div>
+        <div className="agua-card p-4">
+          <div className="mb-3 font-display text-[15px] font-bold">System Alerts</div>
           {alerts.length === 0 ? (
             <div className="text-center text-gray-400 text-xs py-6">No alerts 🎉</div>
           ) : (
@@ -271,9 +273,9 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 gap-3.5">
 
         {/* Best Customers */}
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="text-[15px] font-bold">🏆 Best Customers</div>
-          <div className="text-xs text-gray-500 mt-0.5 mb-3">Ranked by total amount paid</div>
+        <div className="agua-card p-4">
+          <div className="font-display text-[15px] font-bold">Best Customers</div>
+          <div className="mb-3 mt-0.5 text-xs text-muted">Ranked by total amount paid</div>
           <table className="w-full text-[13px] border-collapse">
             <thead>
               <tr>
@@ -300,7 +302,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Recent Orders */}
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <div className="agua-card p-4">
           <div className="text-[15px] font-bold mb-3">📦 Recent Orders</div>
           <table className="w-full text-[13px] border-collapse">
             <thead>

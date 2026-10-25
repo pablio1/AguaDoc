@@ -126,22 +126,22 @@ export default function InventoryPage() {
 
       {/* ── Stat Cards ── */}
       <div className="grid grid-cols-4 gap-4">
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+        <div className="agua-card p-5">
           <div className="text-2xl mb-2">🪣</div>
           <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide">Total Containers</p>
           <p className="text-3xl font-black text-[#0f172a] mt-1">{inventory.totalGallons ?? 0}</p>
         </div>
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+        <div className="agua-card p-5">
           <div className="text-2xl mb-2">✅</div>
           <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide">Ready for Refill</p>
           <p className="text-3xl font-black text-green-600 mt-1">{inventory.readyGallons ?? 0}</p>
         </div>
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+        <div className="agua-card p-5">
           <div className="text-2xl mb-2">🚚</div>
           <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide">In Use / Delivered</p>
           <p className="text-3xl font-black text-blue-500 mt-1">{inUse}</p>
         </div>
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+        <div className="agua-card p-5">
           <div className="text-2xl mb-2">🧼</div>
           <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide">For Cleaning</p>
           <p className="text-3xl font-black text-yellow-500 mt-1">{forCleaning}</p>
@@ -149,7 +149,7 @@ export default function InventoryPage() {
       </div>
 
       {/* ── Progress Bar + Summary ── */}
-      <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+      <div className="agua-card p-5">
         <div className="flex justify-between items-center mb-3">
           <span className="text-sm font-bold text-[#0f172a]">Gallon Availability</span>
           <span className="text-sm font-semibold text-[#0ea5c9]">{ready} / {inventory.totalGallons ?? 0} ready</span>
@@ -170,7 +170,7 @@ export default function InventoryPage() {
       </div>
 
       {/* ── Container Records Table ── */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+      <div className="agua-card p-5">
         <h3 className="text-sm font-bold text-[#0f172a] mb-4">Container Records</h3>
         {containers.length === 0 ? (
           <div className="text-center text-gray-400 py-10 text-sm">
