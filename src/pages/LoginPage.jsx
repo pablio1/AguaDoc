@@ -3,7 +3,7 @@ import { apiLogin } from '../api';
 import { Eye, EyeOff, User, Lock, ArrowRight } from 'lucide-react';
 import AuthShell from '../components/AuthShell';
 
-export default function LoginPage({ onLogin, onGoRegister }) {
+export default function LoginPage({ onLogin, onGoRegister, onGoLanding }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
@@ -27,6 +27,15 @@ export default function LoginPage({ onLogin, onGoRegister }) {
 
   return (
     <AuthShell title="Welcome back" subtitle="Sign in to manage orders, deliveries, and your account.">
+      {onGoLanding && (
+        <button
+          type="button"
+          onClick={onGoLanding}
+          className="mb-4 text-xs font-semibold text-muted hover:text-accent2"
+        >
+          ← Back to home
+        </button>
+      )}
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">Username or email</label>

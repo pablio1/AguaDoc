@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useState } from 'react';
 import { AppProvider } from './context/AppContext';
 import AppLayout from './components/layout/AppLayout';
+import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import CustomerDashboard from './pages/CustomerDashboard';
@@ -18,38 +19,51 @@ import PredictionsPage from './pages/PredictionsPage';
 import DeliveryRoutePage from './pages/DeliveryRoutePage';
 
 function App() {
-  const [user, setUser]     = useState(() => {
-  try {
-    const saved = localStorage.getItem('aguadoc_user');
-    return saved ? JSON.parse(saved) : null;
-  } catch { return null; }
-});
-const [screen, setScreen] = useState('login');
+  const [user, setUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('aguadoc_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  // Public flow: landing → login / register
+  const [screen, setScreen] = useState('landing');
 
   const handleLogin = (u) => {
-  localStorage.setItem('aguadoc_user', JSON.stringify(u));
-  setUser(u);
-};
-const handleLogout = () => {
-  localStorage.removeItem('aguadoc_user');
-  setUser(null);
-  setScreen('login');
-};
+    localStorage.setItem('aguadoc_user', JSON.stringify(u));
+    setUser(u);
+  };
+  const handleLogout = () => {
+    localStorage.removeItem('aguadoc_user');
+    setUser(null);
+    setScreen('landing');
+  };
 
-  // Not logged in
+  // Not logged in — marketing landing first, then auth
   if (!user) {
+    if (screen === 'login') {
+      return (
+        <LoginPage
+          onLogin={handleLogin}
+          onGoRegister={() => setScreen('register')}
+          onGoLanding={() => setScreen('landing')}
+        />
+      );
+    }
     if (screen === 'register') {
       return (
         <RegisterPage
           onGoLogin={() => setScreen('login')}
           onLogin={handleLogin}
+          onGoLanding={() => setScreen('landing')}
         />
       );
     }
     return (
-      <LoginPage
-        onLogin={handleLogin}
-        onGoRegister={() => setScreen('register')}
+      <LandingPage
+        onLogin={() => setScreen('login')}
+        onRegister={() => setScreen('register')}
       />
     );
   }

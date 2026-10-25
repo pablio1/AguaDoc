@@ -16,7 +16,7 @@ function Field({ label, icon: Icon, children }) {
   );
 }
 
-export default function RegisterPage({ onGoLogin, onLogin }) {
+export default function RegisterPage({ onGoLogin, onLogin, onGoLanding }) {
   const [form, setForm] = useState({
     username: '', password: '', confirmPassword: '',
     email: '', phone: '', address: '', gender: '',
@@ -70,6 +70,15 @@ export default function RegisterPage({ onGoLogin, onLogin }) {
 
   return (
     <AuthShell title="Create your account" subtitle="Join AguaDoc to request deliveries and track your water orders.">
+      {onGoLanding && (
+        <button
+          type="button"
+          onClick={onGoLanding}
+          className="mb-4 text-xs font-semibold text-muted hover:text-accent2"
+        >
+          ← Back to home
+        </button>
+      )}
       <form onSubmit={handleSubmit} className="space-y-3 max-h-[65vh] overflow-y-auto pr-1">
         <Field label="Username" icon={User}>
           <input type="text" value={form.username} onChange={set('username')}
