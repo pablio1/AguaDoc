@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { apiGetDeliveryRoute, apiUpdateOrder } from '../api';
@@ -40,6 +40,46 @@ const depotIcon = L.divIcon({
   iconAnchor: [16, 16],
 });
 
+/** Leaflet often mounts before the flex container has its final size — grey tiles = wrong size. */
+function MapResizeFix({ deps = [] }) {
+  const map = useMap();
+  useEffect(() => {
+    const fix = () => map.invalidateSize({ animate: false });
+    fix();
+    const t1 = setTimeout(fix, 50);
+    const t2 = setTimeout(fix, 250);
+    window.addEventListener('resize', fix);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      window.removeEventListener('resize', fix);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, ...deps]);
+  return null;
+}
+
+function FitRoute({ depot, stops, routeLine }) {
+  const map = useMap();
+  useEffect(() => {
+    const points = [];
+    if (depot?.lat != null && depot?.lng != null) points.push([depot.lat, depot.lng]);
+    (stops || []).forEach((s) => {
+      if (s.lat != null && s.lng != null) points.push([Number(s.lat), Number(s.lng)]);
+    });
+    (routeLine || []).forEach((p) => {
+      if (p?.[0] != null && p?.[1] != null) points.push(p);
+    });
+    if (points.length >= 2) {
+      map.fitBounds(points, { padding: [40, 40], maxZoom: 15 });
+    } else if (points.length === 1) {
+      map.setView(points[0], 14);
+    }
+    setTimeout(() => map.invalidateSize({ animate: false }), 0);
+  }, [map, depot, stops, routeLine]);
+  return null;
+}
+
 export default function DeliveryRoutePage() {
   const [data, setData]       = useState({ depot: null, stops: [], geometry: [] });
   const [loading, setLoading] = useState(true);
@@ -73,53 +113,65 @@ export default function DeliveryRoutePage() {
   const routeLine = data.geometry?.map(([lng, lat]) => [lat, lng]) || [];
 
   return (
-    <div className="flex h-full gap-4">
+    // Explicit viewport height — `h-full` fails under AppLayout's scrollable main.
+    <div className="flex h-[calc(100dvh-7.5rem)] min-h-[480px] gap-4">
       {/* Sidebar: ordered stop list */}
-      <div className="agua-card w-80 shrink-0 overflow-y-auto p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-semibold text-[#0f172a]">Delivery Route</h2>
+      <div className="agua-card flex w-80 shrink-0 flex-col overflow-hidden p-4">
+        <div className="mb-3 flex shrink-0 items-center justify-between">
+          <h2 className="font-display font-semibold text-ink">Delivery Route</h2>
           <button
+            type="button"
             onClick={load}
-            className="text-xs text-[#0ea5c9] font-semibold hover:underline"
+            className="text-xs font-semibold text-accent2 hover:underline"
           >
             Refresh
           </button>
         </div>
 
-        {loading && <p className="text-sm text-gray-400">Calculating best route...</p>}
-        {error && <p className="text-sm text-red-500">{error}</p>}
-        {!loading && !error && data.stops.length === 0 && (
-          <p className="text-sm text-gray-400">No pending deliveries with a mapped address right now.</p>
-        )}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {loading && <p className="text-sm text-muted">Calculating best route...</p>}
+          {error && <p className="text-sm text-red-500">{error}</p>}
+          {!loading && !error && data.stops.length === 0 && (
+            <p className="text-sm text-muted">No pending deliveries with a mapped address right now.</p>
+          )}
 
-        <ol className="space-y-3">
-          {data.stops.map((stop, i) => (
-            <li key={stop.id} className="border border-gray-100 rounded-xl p-3">
-              <div className="flex items-start gap-2">
-                <span className="w-6 h-6 shrink-0 rounded-full bg-[#0ea5c9] text-white text-xs font-bold flex items-center justify-center">
-                  {i + 1}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-[#0f172a]">{stop.ref}</p>
-                  <p className="text-xs text-gray-400 truncate">{stop.address}</p>
-                  <p className="text-xs text-gray-400">{stop.quantity} gal • {stop.status}</p>
+          <ol className="space-y-3">
+            {data.stops.map((stop, i) => (
+              <li key={stop.id} className="rounded-xl border border-slate-100 p-3">
+                <div className="flex items-start gap-2">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-bold text-white">
+                    {i + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-ink">{stop.ref}</p>
+                    <p className="truncate text-xs text-muted">{stop.address}</p>
+                    <p className="text-xs text-muted">{stop.quantity} gal • {stop.status}</p>
+                  </div>
                 </div>
-              </div>
-              <button
-                onClick={() => markDelivered(stop.id)}
-                className="mt-2 w-full text-xs font-semibold text-[#0ea5c9] border border-[#0ea5c9]/40 rounded-lg py-1.5 hover:bg-[#0ea5c9]/10"
-              >
-                Mark Delivered
-              </button>
-            </li>
-          ))}
-        </ol>
+                <button
+                  type="button"
+                  onClick={() => markDelivered(stop.id)}
+                  className="mt-2 w-full rounded-lg border border-accent/40 py-1.5 text-xs font-semibold text-accent2 hover:bg-accent/10"
+                >
+                  Mark Delivered
+                </button>
+              </li>
+            ))}
+          </ol>
+        </div>
       </div>
 
-      {/* Map */}
-      <div className="flex-1 rounded-2xl overflow-hidden shadow-sm">
-        <MapContainer center={center} zoom={14} style={{ height: '100%', width: '100%' }}>
+      {/* Map — absolute fill so Leaflet always gets a real pixel size */}
+      <div className="agua-card relative min-h-0 min-w-0 flex-1 overflow-hidden">
+        <MapContainer
+          center={center}
+          zoom={14}
+          className="absolute inset-0 z-0 h-full w-full"
+          style={{ height: '100%', width: '100%' }}
+        >
           <TileLayer attribution={CARTO_ATTRIBUTION} url={cartoVoyagerUrl()} />
+          <MapResizeFix deps={[loading, data.stops.length, routeLine.length]} />
+          <FitRoute depot={data.depot} stops={data.stops} routeLine={routeLine} />
 
           {data.depot && (
             <Marker position={[data.depot.lat, data.depot.lng]} icon={depotIcon}>
@@ -128,7 +180,7 @@ export default function DeliveryRoutePage() {
           )}
 
           {data.stops.map((stop, i) => (
-            <Marker key={stop.id} position={[stop.lat, stop.lng]} icon={numberedIcon(i + 1)}>
+            <Marker key={stop.id} position={[Number(stop.lat), Number(stop.lng)]} icon={numberedIcon(i + 1)}>
               <Popup>
                 <strong>{stop.ref}</strong><br />
                 {stop.address}<br />
