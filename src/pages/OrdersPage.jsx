@@ -25,9 +25,11 @@ export default function OrdersPage() {
   // ── Filter ──
   const filtered = (state.orders || []).filter(o => {
     if (['Pending', 'Assigned', 'Processing', 'Out for Delivery', 'Delivered', 'Cancelled'].includes(filter)) return o.status === filter;
-    if (filter === 'Delivery') return o.type === 'Delivery';
-    if (filter === 'Walk-in')  return o.type === 'Walk-in / Pickup';
-    if (filter === 'Unassigned') return o.type === 'Delivery' && !o.riderId && !['Delivered', 'Cancelled', 'Ready to Go'].includes(o.status);
+    if (filter === 'Delivery') return isDeliveryOrder(o);
+    if (filter === 'Walk-in')  return isWalkinOrder(o);
+    if (filter === 'Unassigned') {
+      return isDeliveryOrder(o) && !o.riderId && !['Delivered', 'Cancelled', 'Ready to Go'].includes(o.status);
+    }
     return true;
   });
 
@@ -116,8 +118,18 @@ export default function OrdersPage() {
     return rider?.fullName || rider?.username || 'Rider';
   }
 
+  function isWalkinOrder(o) {
+    const t = String(o?.type || '').toLowerCase();
+    return t.includes('walk');
+  }
+
+  function isDeliveryOrder(o) {
+    return !isWalkinOrder(o);
+  }
+
   function canAssignRider(o) {
-    return o.type === 'Delivery' && !['Delivered', 'Cancelled', 'Ready to Go'].includes(o.status);
+    // Any non-walk-in order that is still open can be assigned a rider
+    return isDeliveryOrder(o) && !['Delivered', 'Cancelled', 'Ready to Go'].includes(o.status);
   }
 
   // ── Place new order (admin side) ──
@@ -146,7 +158,8 @@ export default function OrdersPage() {
     }
   }
 
-  const pendingDeliveries = (state.orders || []).filter(o => o.status === 'Pending' && o.type === 'Delivery');
+  const pendingDeliveries = (state.orders || []).filter(o => o.status === 'Pending' && isDeliveryOrder(o));
+  const unassignedCount = (state.orders || []).filter(o => canAssignRider(o) && !o.riderId).length;
 
   const statusBadge = {
     'Delivered':          'bg-green-100 text-green-800',
@@ -172,12 +185,25 @@ export default function OrdersPage() {
       <div className="bg-white rounded-xl border border-gray-200 p-4">
 
         {/* Header */}
-        <div className="flex justify-between items-start mb-4">
+        <div className="flex justify-between items-start mb-4 gap-3 flex-wrap">
           <div>
             <div className="text-[15px] font-bold">📋 Order Management</div>
-            <div className="text-xs text-gray-500 mt-0.5">Assign riders to deliveries, track statuses.</div>
+            <div className="text-xs text-gray-500 mt-0.5">
+              Assign riders to deliveries, track statuses.
+              {unassignedCount > 0 && (
+                <span className="ml-1 font-semibold text-amber-600">
+                  · {unassignedCount} unassigned
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex gap-2">
+            <button
+              onClick={() => setFilter('Unassigned')}
+              className="border border-amber-300 bg-amber-50 text-amber-800 text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-amber-100 cursor-pointer"
+            >
+              🛵 Unassigned ({unassignedCount})
+            </button>
             <button
               onClick={() => setShowRouteModal(true)}
               className="border border-gray-200 text-gray-700 text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-gray-50 cursor-pointer"
@@ -209,9 +235,9 @@ export default function OrdersPage() {
           ))}
         </div>
 
-        {/* Orders Table */}
-        <div className="max-h-[500px] overflow-y-auto border border-gray-100 rounded-lg">
-        <table className="w-full text-[13px] border-collapse">
+        {/* Orders Table — horizontal scroll so Actions / Assign stay reachable */}
+        <div className="max-h-[500px] overflow-auto border border-gray-100 rounded-lg">
+        <table className="w-full text-[13px] border-collapse min-w-[980px]">
           <thead className="sticky top-0 bg-white z-10">
             <tr>
               {['Order ID', 'Customer', 'Type', 'Gallons', 'Amount', 'Payment', 'Rider', 'Date', 'Status', 'Actions'].map(h => (
@@ -257,18 +283,30 @@ export default function OrdersPage() {
                       </span>
                     )}
                   </td>
-                  <td className="px-2.5 py-2.5">
+                  <td className="px-2.5 py-2.5 whitespace-nowrap">
                     {getRiderName(o) ? (
-                      <span className="inline-flex items-center gap-1 text-[12px] font-medium text-indigo-700">
+                      <button
+                        type="button"
+                        onClick={() => canAssignRider(o) && openAssign(o)}
+                        className="inline-flex items-center gap-1 text-[12px] font-medium text-indigo-700 hover:underline cursor-pointer"
+                      >
                         🛵 {getRiderName(o)}
-                      </span>
-                    ) : o.type === 'Delivery' ? (
+                      </button>
+                    ) : canAssignRider(o) ? (
+                      <button
+                        type="button"
+                        onClick={() => openAssign(o)}
+                        className="text-[11.5px] text-amber-700 font-semibold bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full hover:bg-amber-100 cursor-pointer"
+                      >
+                        Unassigned — Assign
+                      </button>
+                    ) : isDeliveryOrder(o) ? (
                       <span className="text-[11.5px] text-amber-600 font-semibold">Unassigned</span>
                     ) : (
                       <span className="text-gray-300">—</span>
                     )}
                   </td>
-                  <td className="px-2.5 py-2.5 text-gray-500">
+                  <td className="px-2.5 py-2.5 text-gray-500 whitespace-nowrap">
                     {o.date ? new Date(o.date).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                   </td>
                   <td className="px-2.5 py-2.5">
@@ -276,34 +314,38 @@ export default function OrdersPage() {
                       {o.status}
                     </span>
                   </td>
-                  <td className="px-2.5 py-2.5">
-                    <div className="flex gap-1 flex-wrap">
-                      {canAssignRider(o) && (
+                  <td className="px-2.5 py-2.5 sticky right-0 bg-white shadow-[-6px_0_8px_rgba(0,0,0,0.04)]">
+                    <div className="flex gap-1 flex-wrap min-w-[150px]">
+                      {canAssignRider(o) ? (
                         <button
+                          type="button"
                           onClick={() => openAssign(o)}
-                          className="bg-indigo-500 text-white text-[11px] font-semibold px-2 py-1 rounded cursor-pointer hover:bg-indigo-600"
+                          className="bg-indigo-600 text-white text-[11px] font-semibold px-2.5 py-1 rounded cursor-pointer hover:bg-indigo-700"
                         >
-                          {o.riderId ? '↻ Reassign' : '🛵 Assign'}
+                          {o.riderId ? 'Reassign' : 'Assign'}
                         </button>
-                      )}
+                      ) : null}
                       {o.status === 'Pending' && (
                         <button
+                          type="button"
                           onClick={() => handleMarkProcessing(o)}
                           className="bg-blue-500 text-white text-[11px] font-semibold px-2 py-1 rounded cursor-pointer hover:bg-blue-600"
                         >
-                          ⚙ Process
+                          Process
                         </button>
                       )}
                       {(o.status === 'Processing' || o.status === 'Assigned' || o.status === 'Out for Delivery') && (
                         <button
+                          type="button"
                           onClick={() => handleMarkDone(o)}
                           className="bg-green-600 text-white text-[11px] font-semibold px-2 py-1 rounded cursor-pointer hover:bg-green-700"
                         >
-                          ✔ Done
+                          Done
                         </button>
                       )}
                       {!['Delivered', 'Ready to Go', 'Cancelled'].includes(o.status) && (
                         <button
+                          type="button"
                           onClick={() => handleDeleteOrder(o)}
                           className="border border-gray-200 rounded w-7 h-7 flex items-center justify-center text-[13px] hover:bg-gray-50 cursor-pointer"
                         >

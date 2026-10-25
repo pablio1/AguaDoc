@@ -1,9 +1,12 @@
-import { useState, useEffect } from 'react';
-import { LayoutDashboard, ShoppingCart, CreditCard, LogOut, Bell, User, Info } from 'lucide-react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { useState, useEffect, useMemo } from 'react';
+import { LayoutDashboard, ShoppingCart, CreditCard, LogOut, Bell, User, Info, MapPinned, Radio } from 'lucide-react';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { apiGetOrders, apiUpdateUser, apiAcceptTerms, apiGetNotifications, apiMarkNotificationRead, apiMarkAllNotificationsRead, apiGetRiderLocation } from '../api';
+import {
+  apiGetOrders, apiUpdateUser, apiAcceptTerms, apiGetNotifications,
+  apiMarkNotificationRead, apiMarkAllNotificationsRead, apiGetRiderLocation, apiGetRiderRoute,
+} from '../api';
 import RequestServicePage from './RequestServicePage';
 import { TermsModal, TermsGate, TERMS_VERSION } from '../components/TermsContent';
 import { CARTO_ATTRIBUTION, cartoVoyagerUrl } from '../lib/mapTiles';
@@ -25,6 +28,24 @@ const homeIcon = L.divIcon({
   iconSize: [30, 30], iconAnchor: [15, 15],
 });
 const RIDER_STALE_MS = 2 * 60 * 1000;
+
+function FitBounds({ points }) {
+  const map = useMap();
+  useEffect(() => {
+    const valid = (points || []).filter((p) => p?.[0] != null && p?.[1] != null);
+    if (valid.length >= 2) map.fitBounds(valid, { padding: [40, 40], maxZoom: 16 });
+    else if (valid.length === 1) map.setView(valid[0], 15);
+  }, [points, map]);
+  return null;
+}
+
+function RecenterOnRider({ lat, lng }) {
+  const map = useMap();
+  useEffect(() => {
+    if (lat != null && lng != null) map.panTo([lat, lng], { animate: true });
+  }, [lat, lng, map]);
+  return null;
+}
 
 const NAV = [
   { icon: LayoutDashboard, label: 'Dashboard',       id: 'dashboard' },
@@ -56,6 +77,7 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
   const [checkoutBanner, setCheckoutBanner] = useState(null); // { type: 'success'|'cancel', text }
   const [trackingOrderId, setTrackingOrderId] = useState(null); // which order's live map is expanded
   const [rider, setRider] = useState(null); // { lat, lng, updatedAt } | null
+  const [trackRoute, setTrackRoute] = useState([]); // [lat,lng][]
 
   // Edit Profile state
   const [profileForm, setProfileForm] = useState({
@@ -101,14 +123,45 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
     return () => clearInterval(interval);
   }, [user.id]);
 
-  // Only poll the rider's live position while a delivery is actually being tracked.
+  const outForDeliveryOrders = useMemo(
+    () => orders.filter((o) => o.status === 'Out for Delivery' && o.type !== 'Walk-in / Pickup'),
+    [orders]
+  );
+
+  // Auto-open live map when an order is out for delivery
+  useEffect(() => {
+    if (!outForDeliveryOrders.length) return;
+    setTrackingOrderId((prev) => {
+      if (prev && outForDeliveryOrders.some((o) => o.id === prev)) return prev;
+      return outForDeliveryOrders[0].id;
+    });
+  }, [outForDeliveryOrders]);
+
+  // Poll rider GPS while the live map is open
   useEffect(() => {
     if (!trackingOrderId) return;
     const loadRider = () => apiGetRiderLocation().then(setRider).catch(() => {});
     loadRider();
-    const interval = setInterval(loadRider, 5000);
+    const interval = setInterval(loadRider, 4000);
     return () => clearInterval(interval);
   }, [trackingOrderId]);
+
+  // Draw route from rider → customer drop-off
+  useEffect(() => {
+    let cancelled = false;
+    async function run() {
+      const order = orders.find((o) => o.id === trackingOrderId);
+      if (!order?.lat || !order?.lng || rider?.lat == null || rider?.lng == null) {
+        setTrackRoute([]);
+        return;
+      }
+      const data = await apiGetRiderRoute(rider.lat, rider.lng, order.lat, order.lng);
+      if (cancelled || data.success === false) return;
+      setTrackRoute((data.geometry || []).map(([lng, lat]) => [lat, lng]));
+    }
+    run().catch(() => setTrackRoute([]));
+    return () => { cancelled = true; };
+  }, [trackingOrderId, rider?.lat, rider?.lng, orders]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -331,6 +384,32 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
           {/* ── Dashboard Page ── */}
           {active === 'dashboard' && (
             <>
+              {outForDeliveryOrders.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActive('orders');
+                    setTrackingOrderId(outForDeliveryOrders[0].id);
+                  }}
+                  className="w-full text-left rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-cyan-50 px-5 py-4 shadow-sm hover:shadow-md transition"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-md shadow-emerald-500/30">
+                      <Radio size={20} className="animate-pulse" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold text-emerald-900">Rider is on the way</p>
+                      <p className="text-sm text-emerald-700/80 truncate">
+                        {outForDeliveryOrders[0].ref || 'Your order'} is out for delivery — tap to open the live map
+                      </p>
+                    </div>
+                    <span className="shrink-0 inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white">
+                      <MapPinned size={14} /> Live map
+                    </span>
+                  </div>
+                </button>
+              )}
+
               {/* Welcome banner */}
               <div className="bg-[#0f2a4a] rounded-2xl px-5 sm:px-6 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
@@ -449,30 +528,41 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
                   // Define steps based on order type
                   const steps = isWalkin
                     ? ['Pending', 'Processing', 'Ready to Go']
-                    : ['Pending', 'Processing', 'Delivered'];
+                    : ['Pending', 'Assigned', 'Out for Delivery', 'Delivered'];
 
                   const stepIndex = {
-                    'Pending':     0,
-                    'Processing':  1,
-                    'Active':      1,
-                    'Ready':       2,
-                    'Ready to Go': 2,
-                    'Delivered':   2,
+                    'Pending':            0,
+                    'Assigned':           1,
+                    'Accepted':           1,
+                    'Processing':         1,
+                    'Active':             1,
+                    'Out for Delivery':   2,
+                    'Ready':              2,
+                    'Ready to Go':        2,
+                    'Delivered':           3,
                   };
 
                   const currentStep = stepIndex[order.status] ?? 0;
+                  const isOutForDelivery = order.status === 'Out for Delivery';
+                  const canTrackLive = !isWalkin && (
+                    isOutForDelivery ||
+                    ['Assigned', 'Accepted', 'Processing'].includes(order.status)
+                  );
 
                   const STEP_ICON = isWalkin
                     ? ['🕐', '⚙️', '✅']
-                    : ['🕐', '⚙️', '🚚'];
+                    : ['🕐', '🛵', '🚚', '✅'];
 
                   const statusColor = {
-                    'Pending':     'bg-yellow-100 text-yellow-700',
-                    'Processing':  'bg-blue-100 text-blue-700',
-                    'Active':      'bg-blue-100 text-blue-700',
-                    'Ready':       'bg-green-100 text-green-700',
-                    'Ready to Go': 'bg-green-100 text-green-700',
-                    'Delivered':   'bg-gray-100 text-gray-500',
+                    'Pending':            'bg-yellow-100 text-yellow-700',
+                    'Assigned':           'bg-indigo-100 text-indigo-700',
+                    'Accepted':           'bg-sky-100 text-sky-700',
+                    'Processing':         'bg-blue-100 text-blue-700',
+                    'Active':             'bg-blue-100 text-blue-700',
+                    'Out for Delivery':   'bg-emerald-100 text-emerald-700',
+                    'Ready':              'bg-green-100 text-green-700',
+                    'Ready to Go':        'bg-green-100 text-green-700',
+                    'Delivered':           'bg-gray-100 text-gray-500',
                   };
 
                   return (
@@ -545,38 +635,84 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
                         </div>
                       )}
 
-                      {/* Live delivery tracking — only offered once the order is actually out for delivery */}
-                      {!isWalkin && ['Assigned', 'Accepted', 'Processing', 'Out for Delivery'].includes(order.status) && (
-                        <div className="mt-3 pt-3 border-t border-gray-100">
-                          <button
-                            onClick={() => setTrackingOrderId(trackingOrderId === order.id ? null : order.id)}
-                            className="text-xs font-semibold text-[#0ea5c9] hover:underline"
-                          >
-                            {trackingOrderId === order.id ? '▲ Hide map' : '🛵 Track my delivery'}
-                          </button>
+                      {/* Live rider map — featured when Out for Delivery */}
+                      {canTrackLive && (
+                        <div className={`mt-3 pt-3 border-t ${isOutForDelivery ? 'border-emerald-100' : 'border-gray-100'}`}>
+                          {isOutForDelivery ? (
+                            <button
+                              type="button"
+                              onClick={() => setTrackingOrderId(trackingOrderId === order.id ? null : order.id)}
+                              className="w-full flex items-center justify-between gap-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-3 text-white shadow-md shadow-emerald-500/25"
+                            >
+                              <span className="flex items-center gap-2 text-sm font-bold">
+                                <Radio size={16} className="animate-pulse" />
+                                {trackingOrderId === order.id ? 'Hide live map' : 'View live rider map'}
+                              </span>
+                              <MapPinned size={18} />
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setTrackingOrderId(trackingOrderId === order.id ? null : order.id)}
+                              className="text-xs font-semibold text-[#0ea5c9] hover:underline"
+                            >
+                              {trackingOrderId === order.id ? '▲ Hide map' : '🛵 Preview delivery map'}
+                            </button>
+                          )}
 
                           {trackingOrderId === order.id && (
                             (() => {
                               const riderIsLive = rider?.lat != null && rider?.updatedAt &&
                                 (Date.now() - new Date(rider.updatedAt).getTime()) < RIDER_STALE_MS;
-                              const homePos = order.lat != null && order.lng != null ? [order.lat, order.lng] : null;
-                              const center = riderIsLive ? [rider.lat, rider.lng] : homePos || [10.3157, 123.9740];
+                              const homePos = order.lat != null && order.lng != null
+                                ? [Number(order.lat), Number(order.lng)]
+                                : null;
+                              const riderPos = riderIsLive ? [rider.lat, rider.lng] : null;
+                              const center = riderPos || homePos || [10.3157, 123.9740];
                               return (
-                                <div className="mt-2">
-                                  <div className="h-52 rounded-xl overflow-hidden border border-gray-200">
-                                    <MapContainer center={center} zoom={14} style={{ height: '100%', width: '100%' }}>
+                                <div className="mt-3">
+                                  <div className={`h-64 sm:h-72 rounded-xl overflow-hidden border ${
+                                    isOutForDelivery ? 'border-emerald-200 shadow-lg shadow-emerald-500/10' : 'border-gray-200'
+                                  }`}>
+                                    <MapContainer
+                                      key={`track-${order.id}`}
+                                      center={center}
+                                      zoom={14}
+                                      style={{ height: '100%', width: '100%' }}
+                                    >
                                       <TileLayer attribution={CARTO_ATTRIBUTION} url={cartoVoyagerUrl()} />
+                                      <FitBounds points={[riderPos, homePos]} />
+                                      {riderPos && <RecenterOnRider lat={riderPos[0]} lng={riderPos[1]} />}
                                       {homePos && (
-                                        <Marker position={homePos} icon={homeIcon}><Popup>Your delivery address</Popup></Marker>
+                                        <Marker position={homePos} icon={homeIcon}>
+                                          <Popup>Your delivery address</Popup>
+                                        </Marker>
                                       )}
-                                      {riderIsLive && (
-                                        <Marker position={[rider.lat, rider.lng]} icon={riderIcon}><Popup>Your rider</Popup></Marker>
+                                      {riderPos && (
+                                        <Marker position={riderPos} icon={riderIcon}>
+                                          <Popup>Your rider (live)</Popup>
+                                        </Marker>
+                                      )}
+                                      {trackRoute.length > 1 && (
+                                        <Polyline
+                                          positions={trackRoute}
+                                          pathOptions={{ color: '#0ea5c9', weight: 5, opacity: 0.85 }}
+                                        />
                                       )}
                                     </MapContainer>
                                   </div>
-                                  <p className="text-xs text-gray-400 mt-1.5 text-center">
-                                    {riderIsLive ? '📡 Live location' : 'Waiting for rider to start sharing their location...'}
-                                  </p>
+                                  <div className={`mt-2 flex items-center justify-center gap-2 text-xs font-medium ${
+                                    riderIsLive ? 'text-emerald-600' : 'text-amber-600'
+                                  }`}>
+                                    <span className={`inline-block h-2 w-2 rounded-full ${
+                                      riderIsLive ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'
+                                    }`} />
+                                    {riderIsLive
+                                      ? 'Live rider location updating…'
+                                      : isOutForDelivery
+                                        ? 'Waiting for rider to share GPS…'
+                                        : 'Map shows your drop-off. Live rider appears when delivery starts.'}
+                                  </div>
                                 </div>
                               );
                             })()
