@@ -421,12 +421,167 @@ app.post('/api/orders', async (req, res) => {
   }
 });
 
+// ── RIDER BOOKINGS ──
+app.get('/api/rider/bookings', async (req, res) => {
+  try {
+    const { riderId } = req.query;
+    if (!riderId) return res.status(400).json({ success: false, message: 'riderId required' });
+
+    const [available] = await pool.query(
+      `SELECT o.*, u.fullName AS customerName, u.phone AS customerPhone
+       FROM orders o
+       LEFT JOIN users u ON u.id = o.userId
+       WHERE o.status = 'Pending'
+         AND (o.riderId IS NULL OR o.riderId = '')
+         AND (o.paymentStatus IS NULL OR o.paymentStatus = '' OR o.paymentStatus = 'paid'
+              OR o.payMethod IN ('Cash on Delivery', 'Pay on arrival'))
+       ORDER BY
+         CASE WHEN o.priority = 'priority' THEN 0 ELSE 1 END,
+         o.date ASC`
+    );
+
+    const [mine] = await pool.query(
+      `SELECT o.*, u.fullName AS customerName, u.phone AS customerPhone
+       FROM orders o
+       LEFT JOIN users u ON u.id = o.userId
+       WHERE o.riderId = ?
+         AND o.status IN ('Accepted', 'Processing', 'Out for Delivery')
+       ORDER BY o.date ASC`,
+      [riderId]
+    );
+
+    const [done] = await pool.query(
+      `SELECT o.*, u.fullName AS customerName, u.phone AS customerPhone
+       FROM orders o
+       LEFT JOIN users u ON u.id = o.userId
+       WHERE o.riderId = ? AND o.status = 'Delivered'
+       ORDER BY o.date DESC
+       LIMIT 20`,
+      [riderId]
+    );
+
+    res.json({ available, mine, done });
+  } catch (err) {
+    console.error('Failed to load rider bookings:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/rider/bookings/:id/accept', async (req, res) => {
+  try {
+    const { riderId } = req.body;
+    if (!riderId) return res.status(400).json({ success: false, message: 'riderId required' });
+
+    const [[order]] = await pool.query('SELECT * FROM orders WHERE id = ?', [req.params.id]);
+    if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+    if (order.riderId && order.riderId !== riderId)
+      return res.status(409).json({ success: false, message: 'Already taken by another rider' });
+    if (order.status !== 'Pending')
+      return res.status(400).json({ success: false, message: `Cannot accept order in status ${order.status}` });
+
+    await pool.query(
+      `UPDATE orders SET riderId = ?, status = 'Accepted' WHERE id = ? AND status = 'Pending'`,
+      [riderId, req.params.id]
+    );
+
+    if (order.userId) {
+      await createNotification({
+        audience: 'customer',
+        userId: order.userId,
+        message: `A rider accepted your order ${order.ref}. Delivery is on the way soon.`,
+        type: 'Order',
+      });
+    }
+    await createNotification({
+      audience: 'admin',
+      message: `Rider claimed order ${order.ref}.`,
+      type: 'Order',
+    });
+
+    const [[row]] = await pool.query(
+      `SELECT o.*, u.fullName AS customerName, u.phone AS customerPhone
+       FROM orders o LEFT JOIN users u ON u.id = o.userId WHERE o.id = ?`,
+      [req.params.id]
+    );
+    res.json(row);
+  } catch (err) {
+    console.error('Failed to accept booking:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.put('/api/rider/bookings/:id/status', async (req, res) => {
+  try {
+    const { riderId, status } = req.body;
+    const allowed = ['Accepted', 'Processing', 'Out for Delivery', 'Delivered'];
+    if (!riderId || !allowed.includes(status))
+      return res.status(400).json({ success: false, message: 'Invalid riderId or status' });
+
+    const [[order]] = await pool.query('SELECT * FROM orders WHERE id = ?', [req.params.id]);
+    if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+    if (order.riderId !== riderId)
+      return res.status(403).json({ success: false, message: 'Not your booking' });
+
+    await pool.query('UPDATE orders SET status = ? WHERE id = ?', [status, req.params.id]);
+
+    if (order.userId && status !== order.status) {
+      await createNotification({
+        audience: 'customer',
+        userId: order.userId,
+        message: status === 'Out for Delivery'
+          ? `Your order ${order.ref} is out for delivery — track your rider live.`
+          : status === 'Delivered'
+            ? `Your order ${order.ref} has been delivered. Thank you!`
+            : `Your order ${order.ref} is now ${status}.`,
+        type: 'Order',
+      });
+    }
+
+    const [[row]] = await pool.query(
+      `SELECT o.*, u.fullName AS customerName, u.phone AS customerPhone
+       FROM orders o LEFT JOIN users u ON u.id = o.userId WHERE o.id = ?`,
+      [req.params.id]
+    );
+    res.json(row);
+  } catch (err) {
+    console.error('Failed to update rider booking:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Driving directions from rider GPS → drop-off (OSRM free public API)
+app.get('/api/rider/route', async (req, res) => {
+  try {
+    const { fromLat, fromLng, toLat, toLng } = req.query;
+    if (![fromLat, fromLng, toLat, toLng].every(Boolean))
+      return res.status(400).json({ success: false, message: 'from/to lat,lng required' });
+
+    const osrmRes = await fetch(
+      `http://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}` +
+      `?overview=full&geometries=geojson`
+    );
+    const data = await osrmRes.json();
+    if (data.code !== 'Ok' || !data.routes?.[0])
+      return res.status(500).json({ success: false, message: 'Could not build route' });
+
+    const route = data.routes[0];
+    res.json({
+      geometry: route.geometry.coordinates, // [lng, lat][]
+      distanceM: route.distance,
+      durationS: route.duration,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // ── DELIVERY ROUTE (optimized stop order via OSRM's free public Trip API) ──
 app.get('/api/delivery-route', async (req, res) => {
   try {
     const [orders] = await pool.query(
       `SELECT * FROM orders
-       WHERE status IN ('Pending','Processing') AND lat IS NOT NULL AND lng IS NOT NULL
+       WHERE status IN ('Pending','Accepted','Processing','Out for Delivery')
+         AND lat IS NOT NULL AND lng IS NOT NULL
        ORDER BY date ASC`
     );
 

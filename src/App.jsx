@@ -6,6 +6,7 @@ import AppLayout from './components/layout/AppLayout';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import CustomerDashboard from './pages/CustomerDashboard';
+import RiderDashboard from './pages/RiderDashboard';
 import DashboardPage from './pages/DashboardPage';
 import CustomersPage from './pages/CustomersPage';
 import OrdersPage from './pages/OrdersPage';
@@ -56,6 +57,11 @@ const handleLogout = () => {
   // Customer role → customer dashboard
   if (user.role === 'customer') {
     return <CustomerDashboard user={user} onLogout={handleLogout} onUpdateUser={handleLogin} />;
+  }
+
+  // Rider role → accept bookings + live map delivery
+  if (user.role === 'rider') {
+    return <RiderDashboard user={user} onLogout={handleLogout} />;
   }
 
   // Admin/Staff role → admin panel

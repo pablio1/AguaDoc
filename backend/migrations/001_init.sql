@@ -2,11 +2,11 @@
 -- Apply locally:  npm run db:migrate  (from backend/)
 -- Or: mysql -u root < migrations/001_init.sql
 
-CREATE DATABASE IF NOT EXISTS aguadoc
+CREATE DATABASE IF NOT EXISTS u661528534_aguadoc
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_unicode_ci;
 
-USE aguadoc;
+USE u661528534_aguadoc;
 
 CREATE TABLE IF NOT EXISTS users (
   id              VARCHAR(32)  NOT NULL PRIMARY KEY,
@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS orders (
   id                 VARCHAR(32)    NOT NULL PRIMARY KEY,
   ref                VARCHAR(50)    NULL,
   userId             VARCHAR(32)    NULL,
+  riderId            VARCHAR(32)    NULL,
   type               VARCHAR(100)   NULL,
   quantity           INT            NOT NULL DEFAULT 1,
   status             VARCHAR(50)    NOT NULL DEFAULT 'Pending',
@@ -56,6 +57,7 @@ CREATE TABLE IF NOT EXISTS orders (
   checkoutSessionId  VARCHAR(255)   NULL,
   date               DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY idx_orders_userId (userId),
+  KEY idx_orders_riderId (riderId),
   KEY idx_orders_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

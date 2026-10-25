@@ -86,6 +86,35 @@ export async function apiGetDeliveryRoute() {
   return res.json();
 }
 
+// RIDER
+export async function apiGetRiderBookings(riderId) {
+  const res = await fetch(`${BASE}/rider/bookings?riderId=${encodeURIComponent(riderId)}`);
+  return res.json();
+}
+export async function apiAcceptRiderBooking(orderId, riderId) {
+  const res = await fetch(`${BASE}/rider/bookings/${orderId}/accept`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ riderId }),
+  });
+  const result = await res.json();
+  if (!res.ok) throw new Error(result.message || 'Could not accept booking');
+  return result;
+}
+export async function apiUpdateRiderBookingStatus(orderId, riderId, status) {
+  const res = await fetch(`${BASE}/rider/bookings/${orderId}/status`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ riderId, status }),
+  });
+  const result = await res.json();
+  if (!res.ok) throw new Error(result.message || 'Could not update status');
+  return result;
+}
+export async function apiGetRiderRoute(fromLat, fromLng, toLat, toLng) {
+  const qs = new URLSearchParams({ fromLat, fromLng, toLat, toLng });
+  const res = await fetch(`${BASE}/rider/route?${qs}`);
+  return res.json();
+}
+
 // PAYMENTS
 export async function apiGetPayments() {
   const res = await fetch(`${BASE}/payments`);

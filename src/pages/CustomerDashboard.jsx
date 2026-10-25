@@ -34,10 +34,13 @@ const NAV = [
 ];
 
 const STATUS_STYLE = {
-  Pending:   'bg-yellow-50 text-yellow-600',
-  Active:    'bg-blue-50 text-blue-600',
-  Ready:     'bg-green-50 text-green-600',
-  Delivered: 'bg-gray-100 text-gray-500',
+  Pending:            'bg-yellow-50 text-yellow-600',
+  Accepted:           'bg-sky-50 text-sky-600',
+  Processing:         'bg-blue-50 text-blue-600',
+  'Out for Delivery': 'bg-emerald-50 text-emerald-600',
+  Active:             'bg-blue-50 text-blue-600',
+  Ready:              'bg-green-50 text-green-600',
+  Delivered:          'bg-gray-100 text-gray-500',
 };
 
 export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
@@ -541,7 +544,7 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
                       )}
 
                       {/* Live delivery tracking — only offered once the order is actually out for delivery */}
-                      {!isWalkin && order.status === 'Processing' && (
+                      {!isWalkin && ['Accepted', 'Processing', 'Out for Delivery'].includes(order.status) && (
                         <div className="mt-3 pt-3 border-t border-gray-100">
                           <button
                             onClick={() => setTrackingOrderId(trackingOrderId === order.id ? null : order.id)}
