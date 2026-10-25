@@ -188,6 +188,14 @@ export async function apiCreateCheckout(data) {
   if (!res.ok) throw new Error(result.message || 'Failed to start checkout');
   return result;
 }
+export async function apiGeocode(q) {
+  const res = await fetch(`${BASE}/geocode?q=${encodeURIComponent(q || '')}`);
+  return res.json();
+}
+export async function apiReverseGeocode(lat, lng) {
+  const res = await fetch(`${BASE}/reverse-geocode?lat=${lat}&lng=${lng}`);
+  return res.json();
+}
 export async function apiGetNotifications(audience, userId) {
   const qs = audience === 'customer' ? `?audience=customer&userId=${userId}` : `?audience=admin`;
   const res = await fetch(`${BASE}/notifications${qs}`);

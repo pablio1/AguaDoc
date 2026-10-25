@@ -33,13 +33,15 @@ const id = () => Date.now().toString();
 // ── Geocoding (Nominatim / OpenStreetMap — free, no API key needed) ──
 // Nominatim's usage policy requires a real User-Agent and asks for max ~1 request/sec,
 // which is fine here since this only runs once per order placed.
+const GEO_UA = { 'User-Agent': 'AguaDoc-Capstone/1.0 (school project)' };
+
 async function geocodeAddress(address) {
   if (!address) return { lat: null, lng: null };
   try {
     const query = encodeURIComponent(`${address}, Lapu-Lapu City, Cebu, Philippines`);
     const geoRes = await fetch(
       `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${query}`,
-      { headers: { 'User-Agent': 'AguaDoc-Capstone/1.0 (school project)' } }
+      { headers: GEO_UA }
     );
     const results = await geoRes.json();
     if (results[0]) {
@@ -49,6 +51,31 @@ async function geocodeAddress(address) {
     console.warn('Geocoding failed for address:', address, err.message);
   }
   return { lat: null, lng: null };
+}
+
+async function reverseGeocode(lat, lng) {
+  if (lat == null || lng == null) return null;
+  try {
+    const geoRes = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`,
+      { headers: GEO_UA }
+    );
+    const data = await geoRes.json();
+    return data.display_name || null;
+  } catch (err) {
+    console.warn('Reverse geocoding failed:', err.message);
+    return null;
+  }
+}
+
+// Prefer an explicit map pin; fall back to geocoding the address text.
+async function resolveCoords({ lat, lng, address }) {
+  const pinLat = lat != null && lat !== '' ? parseFloat(lat) : NaN;
+  const pinLng = lng != null && lng !== '' ? parseFloat(lng) : NaN;
+  if (Number.isFinite(pinLat) && Number.isFinite(pinLng)) {
+    return { lat: pinLat, lng: pinLng };
+  }
+  return geocodeAddress(address);
 }
 
 // Your refill station's coordinates — used as the route's starting point.
@@ -145,6 +172,24 @@ function verifyXenditWebhook(headerToken) {
 // ====================== ROUTES ======================
 
 app.get('/api', (req, res) => res.json({ message: '✅ AguaDoc Backend is running!' }));
+
+app.get('/api/geocode', async (req, res) => {
+  try {
+    const coords = await geocodeAddress(req.query.q || '');
+    res.json(coords);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.get('/api/reverse-geocode', async (req, res) => {
+  try {
+    const address = await reverseGeocode(req.query.lat, req.query.lng);
+    res.json({ address, lat: parseFloat(req.query.lat), lng: parseFloat(req.query.lng) });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
 
 // Xendit redirects the customer's browser here after payment (this URL must be public/HTTPS,
 // which is why it points at this tunneled backend). We just bounce them back to your real,
@@ -397,10 +442,10 @@ app.get('/api/orders', async (req, res) => {
 
 app.post('/api/orders', async (req, res) => {
   try {
-    const { userId, type, quantity, status, total, address, payMethod, priority, notes } = req.body;
+    const { userId, type, quantity, status, total, address, payMethod, priority, notes, lat: bodyLat, lng: bodyLng } = req.body;
     const newId  = id();
     const newRef = 'ORD-' + newId.slice(-6);
-    const { lat, lng } = await geocodeAddress(address);
+    const { lat, lng } = await resolveCoords({ lat: bodyLat, lng: bodyLng, address });
     await pool.query(
       'INSERT INTO orders (id, ref, userId, type, quantity, status, total, address, payMethod, priority, notes, lat, lng) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
       [newId, newRef, userId, type, quantity || 1, status || 'Pending', total || 0, address || '', payMethod || '', priority || 'normal', notes || '', lat, lng]
@@ -648,10 +693,10 @@ app.post('/api/rider-location', async (req, res) => {
 // since a customer reaching the success page proves nothing on its own.
 app.post('/api/checkout', async (req, res) => {
   try {
-    const { userId, type, quantity, priority, address, notes, total } = req.body;
+    const { userId, type, quantity, priority, address, notes, total, lat: bodyLat, lng: bodyLng } = req.body;
     const newId  = id();
     const newRef = 'ORD-' + newId.slice(-6);
-    const { lat, lng } = await geocodeAddress(address);
+    const { lat, lng } = await resolveCoords({ lat: bodyLat, lng: bodyLng, address });
 
     await pool.query(
       `INSERT INTO orders (id, ref, userId, type, quantity, status, total, address, priority, notes, lat, lng, paymentStatus)

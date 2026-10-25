@@ -1,11 +1,86 @@
 // src/pages/RequestServicePage.jsx
-import { useState } from 'react';
-import { Info } from 'lucide-react';
-import { apiAddOrder, apiCreateCheckout } from '../api';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Info, MapPin, Crosshair, LocateFixed } from 'lucide-react';
+import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import { apiAddOrder, apiCreateCheckout, apiGeocode, apiReverseGeocode } from '../api';
 import { TermsModal } from '../components/TermsContent';
 
 const PRICE_PER_GALLON = 40;
 const DELIVERY_FEE     = 20;
+const DEFAULT_CENTER   = { lat: 10.3157, lng: 123.9740 }; // Lapu-Lapu / AguaDoc area
+
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+});
+
+const pinIcon = L.divIcon({
+  className: '',
+  html: `<div style="
+    width:36px;height:36px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);
+    background:linear-gradient(135deg,#0ea5c9,#0284a8);border:3px solid #fff;
+    box-shadow:0 6px 16px rgba(14,165,201,.45);display:flex;align-items:center;justify-content:center;
+  "><span style="transform:rotate(45deg);font-size:14px">💧</span></div>`,
+  iconSize: [36, 36],
+  iconAnchor: [18, 36],
+});
+
+function MapClickHandler({ onPick }) {
+  useMapEvents({
+    click(e) {
+      onPick({ lat: e.latlng.lat, lng: e.latlng.lng });
+    },
+  });
+  return null;
+}
+
+function RecenterOnPin({ lat, lng }) {
+  const map = useMap();
+  useEffect(() => {
+    if (lat != null && lng != null) map.panTo([lat, lng], { animate: true });
+  }, [lat, lng, map]);
+  return null;
+}
+
+function DeliveryPinMap({ pin, onPinChange }) {
+  return (
+    <div className="relative overflow-hidden rounded-xl border border-gray-200">
+      <MapContainer
+        center={[pin.lat, pin.lng]}
+        zoom={15}
+        style={{ height: 220, width: '100%' }}
+        scrollWheelZoom={false}
+      >
+        <TileLayer
+          attribution='&copy; OpenStreetMap &copy; CARTO'
+          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+        />
+        <MapClickHandler onPick={onPinChange} />
+        <RecenterOnPin lat={pin.lat} lng={pin.lng} />
+        <Marker
+          position={[pin.lat, pin.lng]}
+          icon={pinIcon}
+          draggable
+          eventHandlers={{
+            dragend: (e) => {
+              const { lat, lng } = e.target.getLatLng();
+              onPinChange({ lat, lng });
+            },
+          }}
+        />
+      </MapContainer>
+      <div className="pointer-events-none absolute bottom-2 left-2 right-2 z-[1000] flex justify-center">
+        <span className="rounded-full bg-white/95 px-3 py-1 text-[11px] font-medium text-gray-600 shadow-sm ring-1 ring-gray-200">
+          Drag the pin or tap the map to set delivery point
+        </span>
+      </div>
+    </div>
+  );
+}
 
 // ── Step indicator ──
 function StepBar({ step, isWalkin }) {
@@ -76,11 +151,16 @@ export default function RequestServicePage({ user, onOrderPlaced }) {
   const [quantity,  setQuantity]  = useState(1);
   const [address,   setAddress]   = useState(user?.address || '');
   const [notes,     setNotes]     = useState('');
+  const [pin, setPin] = useState(DEFAULT_CENTER);
+  const [pinReady, setPinReady] = useState(false);
+  const [geoBusy, setGeoBusy] = useState(false);
   const [loading,   setLoading]   = useState(false);
   const [success,   setSuccess]   = useState(false);
   const [error,     setError]     = useState('');
   const [payMode,   setPayMode]   = useState('online'); // 'online' | 'cod' — delivery only
   const [showTerms, setShowTerms]  = useState(false);
+  const skipNextGeocode = useRef(false);
+  const addressTimer = useRef(null);
 
   const isWalkin   = orderType === 'walkin';
   const isDelivery = orderType === 'delivery';
@@ -88,11 +168,102 @@ export default function RequestServicePage({ user, onOrderPlaced }) {
   const deliveryFee = isDelivery ? DELIVERY_FEE : 0;
   const total      = subtotal + deliveryFee;
 
+  // Seed pin from profile address or device GPS once delivery is chosen
+  useEffect(() => {
+    if (!isDelivery || pinReady) return;
+    let cancelled = false;
+
+    async function seed() {
+      if (user?.address) {
+        const coords = await apiGeocode(user.address);
+        if (!cancelled && coords.lat != null && coords.lng != null) {
+          setPin({ lat: coords.lat, lng: coords.lng });
+          setPinReady(true);
+          return;
+        }
+      }
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            if (cancelled) return;
+            setPin({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+            setPinReady(true);
+          },
+          () => { if (!cancelled) setPinReady(true); },
+          { enableHighAccuracy: true, timeout: 8000 }
+        );
+      } else {
+        setPinReady(true);
+      }
+    }
+
+    seed().catch(() => setPinReady(true));
+    return () => { cancelled = true; };
+  }, [isDelivery, pinReady, user?.address]);
+
+  const applyPin = useCallback(async ({ lat, lng }, { reverse = true } = {}) => {
+    setPin({ lat, lng });
+    setPinReady(true);
+    if (!reverse) return;
+    setGeoBusy(true);
+    try {
+      const data = await apiReverseGeocode(lat, lng);
+      if (data.address) {
+        skipNextGeocode.current = true;
+        setAddress(data.address);
+      }
+    } catch { /* keep pin even if reverse fails */ }
+    finally { setGeoBusy(false); }
+  }, []);
+
+  // When the customer edits the address text, move the pin (debounced)
+  function handleAddressChange(value) {
+    setAddress(value);
+    if (skipNextGeocode.current) {
+      skipNextGeocode.current = false;
+      return;
+    }
+    clearTimeout(addressTimer.current);
+    if (!value.trim() || value.trim().length < 6) return;
+    addressTimer.current = setTimeout(async () => {
+      setGeoBusy(true);
+      try {
+        const coords = await apiGeocode(value.trim());
+        if (coords.lat != null && coords.lng != null) {
+          setPin({ lat: coords.lat, lng: coords.lng });
+          setPinReady(true);
+        }
+      } catch { /* ignore */ }
+      finally { setGeoBusy(false); }
+    }, 700);
+  }
+
+  function useMyLocation() {
+    if (!navigator.geolocation) {
+      setError('Geolocation is not available on this device.');
+      return;
+    }
+    setGeoBusy(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        applyPin({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      },
+      () => {
+        setGeoBusy(false);
+        setError('Could not get your location. Allow GPS or drop the pin manually.');
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
+
   // ── Navigation ──
   function goNext() {
     setError('');
     if (step === 1 && !orderType) { setError('Please select an order type.'); return; }
-    if (step === 2 && isDelivery && !address.trim()) { setError('Please enter a delivery address.'); return; }
+    if (step === 2 && isDelivery) {
+      if (!address.trim()) { setError('Please enter a delivery address.'); return; }
+      if (pin.lat == null || pin.lng == null) { setError('Please set a delivery pin on the map.'); return; }
+    }
     setStep(s => s + 1);
   }
   function goBack() { setError(''); setStep(s => s - 1); }
@@ -136,6 +307,8 @@ export default function RequestServicePage({ user, onOrderPlaced }) {
       payMethod:   'Cash on Delivery',
       total,
       status:      'Pending',
+      lat: pin.lat,
+      lng: pin.lng,
     });
     setSuccess(true);
     onOrderPlaced?.();
@@ -159,6 +332,8 @@ export default function RequestServicePage({ user, onOrderPlaced }) {
       address,
       notes,
       total,
+      lat: pin.lat,
+      lng: pin.lng,
     });
     window.location.href = checkoutUrl; // hand off to Xendit's hosted payment page
   } catch {
@@ -184,7 +359,11 @@ export default function RequestServicePage({ user, onOrderPlaced }) {
           <div className="flex justify-between"><span className="text-gray-400">Total</span><span className="font-bold text-[#0ea5c9]">₱{total.toFixed(2)}</span></div>
         </div>
         <button
-          onClick={() => { setSuccess(false); setStep(1); setOrderType(''); setPriority('normal'); setQuantity(1); setAddress(user?.address || ''); setNotes(''); setPayMode('online'); }}
+          onClick={() => {
+            setSuccess(false); setStep(1); setOrderType(''); setPriority('normal'); setQuantity(1);
+            setAddress(user?.address || ''); setNotes(''); setPayMode('online');
+            setPin(DEFAULT_CENTER); setPinReady(false);
+          }}
           className="bg-[#0ea5c9] hover:bg-[#0284a8] text-white font-semibold px-8 py-3 rounded-xl transition text-sm"
         >
           Place Another Order
@@ -221,7 +400,7 @@ export default function RequestServicePage({ user, onOrderPlaced }) {
                 title="Delivery"
                 subtitle={`+ ₱${DELIVERY_FEE}.00`}
                 selected={orderType === 'delivery'}
-                onClick={() => { setOrderType('delivery'); setError(''); }}
+                onClick={() => { setOrderType('delivery'); setError(''); setPinReady(false); }}
               />
             </div>
 
@@ -279,11 +458,37 @@ export default function RequestServicePage({ user, onOrderPlaced }) {
                   </label>
                   <input
                     value={address}
-                    onChange={e => setAddress(e.target.value)}
+                    onChange={e => handleAddressChange(e.target.value)}
                     placeholder="e.g. Purok 3, Brgy. Cambaro, Mandaue City"
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-[#0ea5c9]"
                   />
                 </div>
+
+                <div className="mb-4">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 uppercase tracking-wide">
+                      <MapPin size={13} className="text-[#0ea5c9]" />
+                      Pin delivery point *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={useMyLocation}
+                      disabled={geoBusy}
+                      className="inline-flex items-center gap-1 rounded-lg border border-[#0ea5c9]/30 bg-[#f0fafd] px-2.5 py-1 text-[11px] font-semibold text-[#0ea5c9] hover:bg-[#e0f5fb] disabled:opacity-50"
+                    >
+                      <LocateFixed size={12} />
+                      Use my location
+                    </button>
+                  </div>
+                  <DeliveryPinMap pin={pin} onPinChange={(p) => applyPin(p)} />
+                  <p className="mt-1.5 flex items-center gap-1 text-[11px] text-gray-400">
+                    <Crosshair size={11} />
+                    {geoBusy
+                      ? 'Updating location…'
+                      : `${pin.lat.toFixed(5)}, ${pin.lng.toFixed(5)}`}
+                  </p>
+                </div>
+
                 <div className="mb-4">
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
                     Delivery Notes / Instructions
@@ -364,9 +569,13 @@ export default function RequestServicePage({ user, onOrderPlaced }) {
                 <div className="flex justify-between text-gray-600">
                   <span>Delivery Fee</span><span>₱{deliveryFee.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-gray-600">
-                  <span>Address</span>
+                <div className="flex justify-between text-gray-600 gap-3">
+                  <span className="shrink-0">Address</span>
                   <span className="text-right max-w-[55%] text-gray-500">{address}</span>
+                </div>
+                <div className="flex justify-between text-gray-600">
+                  <span>Map pin</span>
+                  <span className="text-gray-500 text-xs font-mono">{pin.lat.toFixed(5)}, {pin.lng.toFixed(5)}</span>
                 </div>
                 <div className="flex justify-between font-bold text-[#0f172a] pt-2 border-t border-gray-200">
                   <span>TOTAL</span>
