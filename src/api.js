@@ -146,14 +146,18 @@ export async function apiGetStockItems() {
   const res = await fetch(`${BASE}/stock-items`);
   return res.json();
 }
-export async function apiRestockItem(id, quantity) {
+export async function apiRestockItem(id, quantity, { performedBy, note } = {}) {
   const res = await fetch(`${BASE}/stock-items/${id}/restock`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ quantity }),
+    body: JSON.stringify({ quantity, performedBy, note }),
   });
   const result = await res.json();
   if (!res.ok) throw new Error(result.message || 'Restock failed');
   return result;
+}
+export async function apiGetRestockLogs(limit = 100) {
+  const res = await fetch(`${BASE}/restock-logs?limit=${limit}`);
+  return res.json();
 }
 export async function apiUpdateStockItem(id, data) {
   const res = await fetch(`${BASE}/stock-items/${id}`, {

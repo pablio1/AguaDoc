@@ -2,12 +2,14 @@ import { createContext, useContext, useReducer, useEffect } from 'react';
 import {
   apiGetCustomers, apiGetOrders, apiGetPayments, apiGetInventory,
   apiGetContainers, apiGetUsers, apiGetNotifications, apiGetStockItems,
+  apiGetRestockLogs,
 } from '../api';
 
 const AppContext = createContext(null);
 
 const initialState = {
   customers: [], orders: [], payments: [], containers: [], users: [], stockItems: [],
+  restockLogs: [],
   inventory: { readyGallons: 0, totalGallons: 0, waterLevel: 0, maxCapacity: 10000 },
   notifications: [], loading: true,
 };
@@ -43,6 +45,13 @@ function reducer(state, action) {
         ...state,
         stockItems: state.stockItems.map((i) => (i.id === action.payload.id ? action.payload : i)),
       };
+    case 'SET_RESTOCK_LOGS':
+      return { ...state, restockLogs: Array.isArray(action.payload) ? action.payload : [] };
+    case 'ADD_RESTOCK_LOG':
+      return {
+        ...state,
+        restockLogs: [action.payload, ...(state.restockLogs || [])].slice(0, 200),
+      };
     case 'SET_CONTAINERS':
       return { ...state, containers: action.payload };
     case 'ADD_CONTAINER':
@@ -66,7 +75,7 @@ export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState);
 
   useEffect(() => {
-    const KEYS = ['customers', 'orders', 'payments', 'inventory', 'containers', 'users', 'notifications', 'stockItems'];
+    const KEYS = ['customers', 'orders', 'payments', 'inventory', 'containers', 'users', 'notifications', 'stockItems', 'restockLogs'];
 
     const fetchAll = () => {
       Promise.allSettled([
@@ -78,6 +87,7 @@ export function AppProvider({ children }) {
         apiGetUsers(),
         apiGetNotifications('admin'),
         apiGetStockItems(),
+        apiGetRestockLogs(),
       ]).then((results) => {
         const payload = {};
         results.forEach((result, i) => {

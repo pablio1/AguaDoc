@@ -884,11 +884,22 @@ app.get('/api/stock-items', async (req, res) => {
 app.post('/api/stock-items/:id/restock', async (req, res) => {
   try {
     const qty = Math.max(1, parseInt(req.body.quantity, 10) || 0);
+    const performedBy = String(req.body.performedBy || 'Admin').slice(0, 255);
+    const note = req.body.note != null ? String(req.body.note).slice(0, 500) : null;
     const [[before]] = await pool.query('SELECT * FROM stock_items WHERE id = ?', [req.params.id]);
     if (!before) return res.status(404).json({ success: false, message: 'Item not found' });
 
     await pool.query('UPDATE stock_items SET stock = stock + ? WHERE id = ?', [qty, req.params.id]);
     const [[row]] = await pool.query('SELECT * FROM stock_items WHERE id = ?', [req.params.id]);
+
+    const logId = `rl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    await pool.query(
+      `INSERT INTO restock_logs
+         (id, stockItemId, itemName, category, quantityAdded, stockBefore, stockAfter, performedBy, note)
+       VALUES (?,?,?,?,?,?,?,?,?)`,
+      [logId, before.id, before.name, before.category, qty, before.stock, row.stock, performedBy, note]
+    );
+    const [[log]] = await pool.query('SELECT * FROM restock_logs WHERE id = ?', [logId]);
 
     await createNotification({
       audience: 'admin',
@@ -896,9 +907,22 @@ app.post('/api/stock-items/:id/restock', async (req, res) => {
       type: 'Inventory',
     });
 
-    res.json(row);
+    res.json({ item: row, log });
   } catch (err) {
     console.error('Failed to restock:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.get('/api/restock-logs', async (req, res) => {
+  try {
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 100));
+    const [rows] = await pool.query(
+      'SELECT * FROM restock_logs ORDER BY createdAt DESC LIMIT ?',
+      [limit]
+    );
+    res.json(rows);
+  } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
