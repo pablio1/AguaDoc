@@ -871,6 +871,72 @@ app.put('/api/inventory', async (req, res) => {
   }
 });
 
+// ── STOCK ITEMS (Inventory Monitor catalog) ──
+app.get('/api/stock-items', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM stock_items ORDER BY category, name');
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/stock-items/:id/restock', async (req, res) => {
+  try {
+    const qty = Math.max(1, parseInt(req.body.quantity, 10) || 0);
+    const [[before]] = await pool.query('SELECT * FROM stock_items WHERE id = ?', [req.params.id]);
+    if (!before) return res.status(404).json({ success: false, message: 'Item not found' });
+
+    await pool.query('UPDATE stock_items SET stock = stock + ? WHERE id = ?', [qty, req.params.id]);
+    const [[row]] = await pool.query('SELECT * FROM stock_items WHERE id = ?', [req.params.id]);
+
+    await createNotification({
+      audience: 'admin',
+      message: `Restocked ${before.name}: +${qty} (now ${row.stock}).`,
+      type: 'Inventory',
+    });
+
+    res.json(row);
+  } catch (err) {
+    console.error('Failed to restock:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.put('/api/stock-items/:id', async (req, res) => {
+  try {
+    const { stock, minAlert, unitPrice } = req.body;
+    const [[before]] = await pool.query('SELECT * FROM stock_items WHERE id = ?', [req.params.id]);
+    if (!before) return res.status(404).json({ success: false, message: 'Item not found' });
+
+    await pool.query(
+      `UPDATE stock_items SET
+         stock = COALESCE(?, stock),
+         minAlert = COALESCE(?, minAlert),
+         unitPrice = COALESCE(?, unitPrice)
+       WHERE id = ?`,
+      [
+        stock != null ? parseInt(stock, 10) : null,
+        minAlert != null ? parseInt(minAlert, 10) : null,
+        unitPrice != null ? parseFloat(unitPrice) : null,
+        req.params.id,
+      ]
+    );
+
+    const [[row]] = await pool.query('SELECT * FROM stock_items WHERE id = ?', [req.params.id]);
+    if (row.stock <= row.minAlert) {
+      await createNotification({
+        audience: 'admin',
+        message: `Low stock: ${row.name} is at ${row.stock} (min ${row.minAlert}).`,
+        type: 'Inventory',
+      });
+    }
+    res.json(row);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // ── CONTAINERS ──
 app.get('/api/containers', async (req, res) => {
   const [rows] = await pool.query('SELECT * FROM containers ORDER BY createdAt DESC');

@@ -141,6 +141,30 @@ export async function apiUpdateInventory(data) {
   return res.json();
 }
 
+// STOCK ITEMS
+export async function apiGetStockItems() {
+  const res = await fetch(`${BASE}/stock-items`);
+  return res.json();
+}
+export async function apiRestockItem(id, quantity) {
+  const res = await fetch(`${BASE}/stock-items/${id}/restock`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ quantity }),
+  });
+  const result = await res.json();
+  if (!res.ok) throw new Error(result.message || 'Restock failed');
+  return result;
+}
+export async function apiUpdateStockItem(id, data) {
+  const res = await fetch(`${BASE}/stock-items/${id}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  const result = await res.json();
+  if (!res.ok) throw new Error(result.message || 'Update failed');
+  return result;
+}
+
 // CONTAINERS
 export async function apiGetContainers() {
   const res = await fetch(`/api/containers`);
