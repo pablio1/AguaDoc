@@ -608,17 +608,39 @@ app.get('/api/rider/route', async (req, res) => {
 
     const osrmRes = await fetch(
       `http://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}` +
-      `?overview=full&geometries=geojson`
+      `?overview=full&geometries=geojson&alternatives=true&steps=true`
     );
     const data = await osrmRes.json();
     if (data.code !== 'Ok' || !data.routes?.[0])
       return res.status(500).json({ success: false, message: 'Could not build route' });
 
-    const route = data.routes[0];
+    const routes = data.routes.map((route, index) => {
+      const steps = (route.legs || []).flatMap((leg) =>
+        (leg.steps || []).map((step) => ({
+          name: step.name || '',
+          ref: step.ref || '',
+          type: step.maneuver?.type || 'continue',
+          modifier: step.maneuver?.modifier || '',
+          distanceM: step.distance,
+          durationS: step.duration,
+        }))
+      );
+      return {
+        index,
+        geometry: route.geometry.coordinates, // [lng, lat][]
+        distanceM: route.distance,
+        durationS: route.duration,
+        steps,
+      };
+    });
+
+    const route = routes[0];
     res.json({
-      geometry: route.geometry.coordinates, // [lng, lat][]
-      distanceM: route.distance,
-      durationS: route.duration,
+      geometry: route.geometry,
+      distanceM: route.distanceM,
+      durationS: route.durationS,
+      steps: route.steps,
+      routes,
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

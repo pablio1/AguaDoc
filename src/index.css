@@ -155,3 +155,9 @@
     transform: translateY(-8px);
   }
 }
+
+.rider-nav-arrow,
+.rider-drop-icon {
+  background: none !important;
+  border: none !important;
+}
