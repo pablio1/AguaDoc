@@ -161,3 +161,8 @@
   background: none !important;
   border: none !important;
 }
+
+.leaflet-control-rotate,
+.leaflet-rotate-control {
+  display: none !important;
+}

@@ -19,6 +19,7 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "leaflet": "^1.9.4",
+    "leaflet-rotate": "^0.5.2",
     "lucide-react": "^1.21.0",
     "mysql2": "^3.24.6",
     "react": "^19.2.6",

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
+import 'leaflet-rotate';
 import 'leaflet/dist/leaflet.css';
 import {
   Bike, Package, MapPin, Navigation, CheckCircle2, LogOut,
@@ -43,6 +44,24 @@ function distanceM(a, b) {
   const s = Math.sin(dLat / 2) ** 2
     + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+function destinationPoint(lat, lng, bearingDeg, meters) {
+  const R = 6371000;
+  const δ = meters / R;
+  const θ = toRad(bearingDeg);
+  const φ1 = toRad(lat);
+  const λ1 = toRad(lng);
+  const φ2 = Math.asin(Math.sin(φ1) * Math.cos(δ) + Math.cos(φ1) * Math.sin(δ) * Math.cos(θ));
+  const λ2 = λ1 + Math.atan2(
+    Math.sin(θ) * Math.sin(δ) * Math.cos(φ1),
+    Math.cos(δ) - Math.sin(φ1) * Math.sin(φ2)
+  );
+  return [toDeg(φ2), toDeg(λ2)];
+}
+
+function shortestAngleDiff(from, to) {
+  return ((to - from + 540) % 360) - 180;
 }
 
 function makeArrowIcon(heading = 0) {
@@ -151,8 +170,15 @@ function FitBounds({ points, enabled }) {
   return null;
 }
 
-function NavMapController({ follow, lat, lng, pickingRoute, allPoints, onUserDrag }) {
+const NAV_ZOOM = 17.4;
+const NAV_PITCH = 48;
+const LOOKAHEAD_M = 110;
+
+function NavMapController({ follow, lat, lng, heading, pickingRoute, allPoints, onUserDrag }) {
   const map = useMap();
+  const lastBearing = useRef(0);
+  const followBooted = useRef(false);
+
   useMapEvents({
     dragstart() {
       onUserDrag();
@@ -160,15 +186,44 @@ function NavMapController({ follow, lat, lng, pickingRoute, allPoints, onUserDra
   });
 
   useEffect(() => {
+    map.invalidateSize({ animate: false });
+    return () => {
+      if (typeof map.setPitch === 'function') map.setPitch(0, { animate: false });
+      if (typeof map.setBearing === 'function') map.setBearing(0, { animate: false });
+    };
+  }, [map]);
+
+  useEffect(() => {
     if (pickingRoute) {
+      followBooted.current = false;
+      if (typeof map.setPitch === 'function') map.setPitch(0, { animate: true, duration: 0.3 });
+      if (typeof map.setBearing === 'function') map.setBearing(0, { animate: true, duration: 0.3 });
       const valid = (allPoints || []).filter((p) => p?.[0] != null && p?.[1] != null);
-      if (valid.length >= 2) map.fitBounds(valid, { padding: [90, 90], maxZoom: 15 });
+      if (valid.length >= 2) map.fitBounds(valid, { padding: [100, 100], maxZoom: 15 });
       return;
     }
-    if (follow && lat != null && lng != null) {
-      map.panTo([lat, lng], { animate: true });
+
+    if (!follow || lat == null || lng == null) {
+      followBooted.current = false;
+      return;
     }
-  }, [follow, lat, lng, pickingRoute, allPoints, map]);
+
+    const target = Number.isFinite(heading) ? heading : lastBearing.current;
+    const smoothed = (lastBearing.current + shortestAngleDiff(lastBearing.current, target) * 0.4 + 360) % 360;
+    lastBearing.current = smoothed;
+
+    const look = destinationPoint(lat, lng, smoothed, LOOKAHEAD_M);
+    const firstLock = !followBooted.current;
+    followBooted.current = true;
+
+    map.setView(look, NAV_ZOOM, { animate: true, duration: firstLock ? 0.7 : 0.35 });
+    if (typeof map.setBearing === 'function') {
+      map.setBearing(smoothed, { animate: true, duration: firstLock ? 0.65 : 0.35 });
+    }
+    if (typeof map.setPitch === 'function') {
+      map.setPitch(NAV_PITCH, { animate: true, duration: firstLock ? 0.65 : 0.35 });
+    }
+  }, [follow, lat, lng, heading, pickingRoute, allPoints, map]);
 
   return null;
 }
@@ -345,7 +400,7 @@ export default function RiderDashboard({ user, onLogout }) {
         setActiveId(order.id);
         setFollow(true);
         setNavOpen(true);
-        setPickingRoute(true);
+        setPickingRoute(false);
       }
       if (status === 'Delivered') {
         setNavOpen(false);
@@ -363,7 +418,7 @@ export default function RiderDashboard({ user, onLogout }) {
   function openNavigation(order) {
     setActiveId(order.id);
     setFollow(true);
-    setPickingRoute(true);
+    setPickingRoute(false);
     setNavOpen(true);
     if (!sharing) startGps();
   }
@@ -384,10 +439,15 @@ export default function RiderDashboard({ user, onLogout }) {
 
   const currentRoute = routes[selectedRoute] || routes[0] || null;
   const routeLine = (currentRoute?.geometry || []).map(([lng, lat]) => [lat, lng]);
-  const heading = gps?.heading != null ? gps.heading : headingFromLine(gps, routeLine);
-  const arrowIcon = useMemo(() => makeArrowIcon(heading), [heading]);
-  const banner = bannerCopy(currentRoute?.steps);
+  const heading = (gps && routeLine.length > 1)
+    ? headingFromLine(gps, routeLine)
+    : (gps?.heading ?? 0);
   const navigating = navOpen && Boolean(activeOrder);
+  const arrowIcon = useMemo(
+    () => makeArrowIcon(navigating && follow ? 0 : heading),
+    [navigating, follow, heading]
+  );
+  const banner = bannerCopy(currentRoute?.steps);
 
   const fastestIdx = routes.reduce((best, r, i, arr) => (
     (r.durationS || Infinity) < (arr[best]?.durationS || Infinity) ? i : best
@@ -415,6 +475,14 @@ export default function RiderDashboard({ user, onLogout }) {
           center={mapCenter}
           zoom={14}
           zoomControl={false}
+          zoomSnap={0}
+          rotate
+          bearing={0}
+          pitch={0}
+          rotateControl={false}
+          touchRotate={false}
+          pitchDrag={false}
+          shiftKeyRotate={false}
           style={{ height: '100%', width: '100%', background: navigating ? '#eef1f3' : '#0b1628' }}
         >
           <TileLayer
@@ -428,6 +496,7 @@ export default function RiderDashboard({ user, onLogout }) {
               follow={follow}
               lat={gps?.lat}
               lng={gps?.lng}
+              heading={heading}
               pickingRoute={pickingRoute}
               allPoints={allRoutePoints}
               onUserDrag={() => setFollow(false)}
@@ -581,7 +650,7 @@ export default function RiderDashboard({ user, onLogout }) {
               <p className="text-sm font-bold text-slate-900">Choose a route</p>
               <button
                 type="button"
-                onClick={() => setPickingRoute(false)}
+                onClick={() => { setPickingRoute(false); setFollow(true); }}
                 className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100"
                 aria-label="Close route picker"
               >
