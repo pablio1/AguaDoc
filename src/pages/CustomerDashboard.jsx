@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import {
   LayoutDashboard, PlusCircle, Package, CreditCard, LogOut, Bell, User, Info,
   MapPinned, Radio, Search, ClipboardList, Clock, CheckCircle2, Truck, MapPin,
+  Store, Cog, Bike, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import BrandMark from '../components/BrandMark';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
@@ -68,11 +69,257 @@ const STATUS_STYLE = {
   'Out for Delivery': 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100',
   Active:             'bg-blue-50 text-blue-700 ring-1 ring-blue-100',
   Ready:              'bg-green-50 text-green-700 ring-1 ring-green-100',
-  Delivered:          'bg-slate-100 text-slate-500 ring-1 ring-slate-200/80',
+  'Ready to Go':      'bg-green-50 text-green-700 ring-1 ring-green-100',
+  Delivered:          'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100',
+  Cancelled:          'bg-red-50 text-red-600 ring-1 ring-red-100',
 };
+
+const COMPLETED_STATUSES = new Set(['Delivered', 'Cancelled']);
+
+function isWalkinOrder(order) {
+  return order.type === 'Walk-in / Pickup' || order.type === 'Walk-in';
+}
+
+function isCompletedOrder(order) {
+  return COMPLETED_STATUSES.has(order.status);
+}
+
+function orderSteps(order) {
+  if (isWalkinOrder(order)) {
+    return [
+      { label: 'Received', icon: Clock },
+      { label: 'Preparing', icon: Cog },
+      { label: 'Ready', icon: Store },
+    ];
+  }
+  return [
+    { label: 'Placed', icon: Clock },
+    { label: 'Assigned', icon: Bike },
+    { label: 'On the way', icon: Truck },
+    { label: 'Delivered', icon: CheckCircle2 },
+  ];
+}
+
+function orderStepIndex(order) {
+  const map = {
+    Pending: 0,
+    Assigned: 1,
+    Accepted: 1,
+    Processing: 1,
+    Active: 1,
+    'Out for Delivery': 2,
+    Ready: 2,
+    'Ready to Go': 2,
+    Delivered: isWalkinOrder(order) ? 2 : 3,
+    Cancelled: -1,
+  };
+  return map[order.status] ?? 0;
+}
+
+function formatOrderDate(value) {
+  if (!value) return '—';
+  return new Date(value).toLocaleDateString('en-PH', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+function OrderCard({
+  order,
+  completed,
+  trackingOrderId,
+  setTrackingOrderId,
+  rider,
+  trackRoute,
+}) {
+  const walkin = isWalkinOrder(order);
+  const steps = orderSteps(order);
+  const currentStep = orderStepIndex(order);
+  const isOutForDelivery = order.status === 'Out for Delivery';
+  const canTrackLive = !walkin && !completed && (
+    isOutForDelivery ||
+    ['Assigned', 'Accepted', 'Processing', 'Pending'].includes(order.status)
+  );
+  const tracking = trackingOrderId === order.id;
+  const TypeIcon = walkin ? Store : Truck;
+
+  return (
+    <article
+      className={`agua-card overflow-hidden transition ${
+        isOutForDelivery ? 'ring-1 ring-emerald-200 shadow-md shadow-emerald-500/10' : ''
+      }`}
+    >
+      <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600">
+              <TypeIcon size={12} />
+              {walkin ? 'Pickup' : 'Delivery'}
+            </span>
+            <span className={`agua-badge ${STATUS_STYLE[order.status] || 'bg-slate-100 text-slate-500 ring-1 ring-slate-200/80'}`}>
+              {order.status}
+            </span>
+            {isOutForDelivery && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                <Radio size={10} className="animate-pulse" /> Live
+              </span>
+            )}
+          </div>
+          <p className="mt-2 font-mono text-sm font-bold text-ink">{order.ref || order.id}</p>
+          <p className="mt-1 text-sm text-muted">
+            {order.quantity} gallon{Number(order.quantity) === 1 ? '' : 's'}
+            <span className="mx-1.5 text-slate-300">·</span>
+            {formatOrderDate(order.date)}
+          </p>
+          {!walkin && order.address && (
+            <p className="mt-2 flex items-start gap-1.5 text-xs text-muted">
+              <MapPin size={13} className="mt-0.5 shrink-0 text-blue-500" />
+              <span className="line-clamp-2">{order.address}</span>
+            </p>
+          )}
+        </div>
+        <div className="shrink-0 text-left sm:text-right">
+          <p className="font-display text-xl font-bold text-blue-600">{formatMoney(order.total)}</p>
+          <p className="mt-0.5 text-xs text-muted">
+            {walkin ? 'Pay on arrival' : (order.payMethod || 'Online payment')}
+          </p>
+        </div>
+      </div>
+
+      {!completed && currentStep >= 0 && (
+        <div className="border-t border-slate-100 bg-slate-50/60 px-5 py-4">
+          <div className="flex items-center">
+            {steps.map((step, i) => {
+              const done = currentStep > i || (order.status === 'Delivered' && i === steps.length - 1);
+              const current = currentStep === i && order.status !== 'Delivered';
+              const Icon = step.icon;
+              return (
+                <div key={step.label} className="flex flex-1 items-center last:flex-none">
+                  <div className="flex flex-col items-center">
+                    <div
+                      className={`flex h-9 w-9 items-center justify-center rounded-full border-2 transition ${
+                        done
+                          ? 'border-blue-500 bg-blue-500 text-white'
+                          : current
+                            ? 'border-blue-500 bg-white text-blue-600 shadow-sm'
+                            : 'border-slate-200 bg-white text-slate-300'
+                      }`}
+                    >
+                      {done ? <CheckCircle2 size={16} /> : <Icon size={15} />}
+                    </div>
+                    <span
+                      className={`mt-1.5 max-w-[72px] text-center text-[10px] font-semibold leading-tight sm:text-[11px] ${
+                        done || current ? 'text-ink' : 'text-slate-300'
+                      }`}
+                    >
+                      {step.label}
+                    </span>
+                  </div>
+                  {i < steps.length - 1 && (
+                    <div className={`mx-1.5 mb-5 h-0.5 flex-1 rounded sm:mx-2 ${done ? 'bg-blue-500' : 'bg-slate-200'}`} />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {completed && (
+        <div className="flex items-center gap-2 border-t border-slate-100 bg-emerald-50/40 px-5 py-3 text-xs font-medium text-emerald-700">
+          <CheckCircle2 size={14} />
+          {order.status === 'Cancelled' ? 'This order was cancelled' : 'Order completed successfully'}
+        </div>
+      )}
+
+      {canTrackLive && (
+        <div className="border-t border-slate-100 px-5 py-3">
+          <button
+            type="button"
+            onClick={() => setTrackingOrderId(tracking ? null : order.id)}
+            className={`flex w-full items-center justify-between gap-3 rounded-xl px-4 py-3 text-sm font-bold transition ${
+              isOutForDelivery
+                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+                : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              {isOutForDelivery ? <Radio size={16} className="animate-pulse" /> : <MapPinned size={16} />}
+              {tracking
+                ? 'Hide map'
+                : isOutForDelivery
+                  ? 'Track rider live'
+                  : 'Preview delivery map'}
+            </span>
+            {tracking ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+          </button>
+
+          {tracking && (() => {
+            const riderIsLive = rider?.lat != null && rider?.updatedAt
+              && (Date.now() - new Date(rider.updatedAt).getTime()) < RIDER_STALE_MS;
+            const homePos = order.lat != null && order.lng != null
+              ? [Number(order.lat), Number(order.lng)]
+              : null;
+            const riderPos = riderIsLive ? [rider.lat, rider.lng] : null;
+            const center = riderPos || homePos || [10.3157, 123.9740];
+            return (
+              <div className="mt-3">
+                <div className={`h-64 overflow-hidden rounded-xl border sm:h-72 ${
+                  isOutForDelivery ? 'border-emerald-200 shadow-lg shadow-emerald-500/10' : 'border-slate-200'
+                }`}>
+                  <MapContainer
+                    key={`track-${order.id}`}
+                    center={center}
+                    zoom={14}
+                    style={{ height: '100%', width: '100%' }}
+                  >
+                    <TileLayer attribution={CARTO_ATTRIBUTION} url={cartoVoyagerUrl()} />
+                    <FitBounds points={[riderPos, homePos]} />
+                    {riderPos && <RecenterOnRider lat={riderPos[0]} lng={riderPos[1]} />}
+                    {homePos && (
+                      <Marker position={homePos} icon={homeIcon}>
+                        <Popup>Your delivery address</Popup>
+                      </Marker>
+                    )}
+                    {riderPos && (
+                      <Marker position={riderPos} icon={riderIcon}>
+                        <Popup>Your rider (live)</Popup>
+                      </Marker>
+                    )}
+                    {trackRoute.length > 1 && (
+                      <Polyline
+                        positions={trackRoute}
+                        pathOptions={{ color: '#3b82f6', weight: 5, opacity: 0.85 }}
+                      />
+                    )}
+                  </MapContainer>
+                </div>
+                <p className={`mt-2 flex items-center justify-center gap-2 text-xs font-medium ${
+                  riderIsLive ? 'text-emerald-600' : 'text-amber-600'
+                }`}>
+                  <span className={`inline-block h-2 w-2 rounded-full ${
+                    riderIsLive ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'
+                  }`} />
+                  {riderIsLive
+                    ? 'Live rider location updating…'
+                    : isOutForDelivery
+                      ? 'Waiting for rider to share GPS…'
+                      : 'Drop-off shown now. Rider appears when delivery starts.'}
+                </p>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+    </article>
+  );
+}
 
 export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
   const [active, setActive]   = useState('dashboard');
+  const [ordersTab, setOrdersTab] = useState('active'); // active | completed
   const [orders, setOrders]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState([]);
@@ -112,6 +359,7 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
         ? { type: 'success', text: 'Payment received! Your delivery order is confirmed.' }
         : { type: 'cancel',  text: 'Payment was not completed. Your order was not placed — feel free to try again.' }
     );
+    setOrdersTab('active');
     setActive('orders'); // jump to where they can see the result
     window.history.replaceState({}, '', window.location.pathname); // clean the URL
     apiGetOrders(user.id).then(data => setOrders(Array.isArray(data) ? data : [])); // pick up the now-paid order
@@ -245,6 +493,20 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
   const initials  = (user?.username || user?.fullName || 'U').slice(0, 1).toUpperCase();
   const firstName = (user?.fullName || user?.username || 'User').split(' ')[0];
   const recentOrders = [...orders].reverse().slice(0, 10);
+
+  const sortedOrders = useMemo(
+    () => [...orders].sort((a, b) => new Date(b.date) - new Date(a.date)),
+    [orders]
+  );
+  const activeOrders = useMemo(
+    () => sortedOrders.filter((o) => !isCompletedOrder(o)),
+    [sortedOrders]
+  );
+  const completedOrders = useMemo(
+    () => sortedOrders.filter((o) => isCompletedOrder(o)),
+    [sortedOrders]
+  );
+  const ordersForTab = ordersTab === 'completed' ? completedOrders : activeOrders;
 
   return (
     <div className="flex h-screen overflow-hidden bg-bg">
@@ -422,6 +684,7 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
                   type="button"
                   onClick={() => {
                     setActive('orders');
+                    setOrdersTab('active');
                     setTrackingOrderId(outForDeliveryOrders[0].id);
                   }}
                   className="agua-card w-full text-left border-emerald-200/80 bg-gradient-to-r from-emerald-50/90 to-white px-5 py-4 transition hover:shadow-md"
@@ -495,7 +758,7 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setActive('orders')}
+                    onClick={() => { setOrdersTab('active'); setActive('orders'); }}
                     className="agua-btn agua-btn-secondary !py-1.5 !text-xs"
                   >
                     View all
@@ -537,12 +800,13 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
 
           {/* ── My Orders Page ── */}
           {active === 'orders' && (
-            <div className="space-y-4">
-              {/* Header */}
+            <div className="space-y-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <h2 className="font-display text-2xl font-bold tracking-tight text-ink">My orders</h2>
-                  <p className="mt-1 text-sm text-muted">Track all your orders and their current status.</p>
+                  <p className="mt-1 text-sm text-muted">
+                    Follow active deliveries and review past completed orders.
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -553,15 +817,71 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
                 </button>
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setOrdersTab('active')}
+                  className={`agua-card px-4 py-3.5 text-left transition ${
+                    ordersTab === 'active' ? 'ring-2 ring-blue-500 shadow-md' : 'hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">In progress</p>
+                    <Clock size={16} className={ordersTab === 'active' ? 'text-blue-500' : 'text-slate-300'} />
+                  </div>
+                  <p className="mt-1 font-display text-2xl font-bold text-ink">{activeOrders.length}</p>
+                  <p className="mt-0.5 text-xs text-muted">Pending & on the way</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOrdersTab('completed')}
+                  className={`agua-card px-4 py-3.5 text-left transition ${
+                    ordersTab === 'completed' ? 'ring-2 ring-blue-500 shadow-md' : 'hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">Completed</p>
+                    <CheckCircle2 size={16} className={ordersTab === 'completed' ? 'text-emerald-500' : 'text-slate-300'} />
+                  </div>
+                  <p className="mt-1 font-display text-2xl font-bold text-ink">{completedOrders.length}</p>
+                  <p className="mt-0.5 text-xs text-muted">Delivered history</p>
+                </button>
+              </div>
+
+              <div className="flex rounded-xl border border-slate-200 bg-white p-1">
+                {[
+                  { id: 'active', label: 'Active', count: activeOrders.length },
+                  { id: 'completed', label: 'Completed', count: completedOrders.length },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setOrdersTab(tab.id)}
+                    className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold transition ${
+                      ordersTab === tab.id
+                        ? 'bg-blue-500 text-white shadow-sm'
+                        : 'text-muted hover:bg-slate-50 hover:text-ink'
+                    }`}
+                  >
+                    {tab.label}
+                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                      ordersTab === tab.id ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
               {loading ? (
-                <div className="agua-card p-10 text-center text-gray-400">Loading...</div>
+                <div className="agua-card p-10 text-center text-muted">Loading orders…</div>
               ) : orders.length === 0 ? (
                 <div className="agua-card p-10 text-center">
-                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-accent2 ring-1 ring-blue-100">
+                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 ring-1 ring-blue-100">
                     <Package size={26} />
                   </div>
                   <p className="font-semibold text-ink">No orders yet</p>
-                  <p className="mt-1 text-sm text-muted">Place your first order to get started.</p>
+                  <p className="mt-1 text-sm text-muted">Place your first refill to see it tracked here.</p>
                   <button
                     type="button"
                     onClick={() => setActive('request')}
@@ -570,198 +890,60 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
                     Request service
                   </button>
                 </div>
+              ) : ordersForTab.length === 0 ? (
+                <div className="agua-card p-10 text-center">
+                  <div className={`mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl ring-1 ${
+                    ordersTab === 'active'
+                      ? 'bg-amber-50 text-amber-600 ring-amber-100'
+                      : 'bg-emerald-50 text-emerald-600 ring-emerald-100'
+                  }`}>
+                    {ordersTab === 'active' ? <Clock size={26} /> : <CheckCircle2 size={26} />}
+                  </div>
+                  <p className="font-semibold text-ink">
+                    {ordersTab === 'active' ? 'Nothing in progress' : 'No completed orders yet'}
+                  </p>
+                  <p className="mt-1 text-sm text-muted">
+                    {ordersTab === 'active'
+                      ? 'New and ongoing orders will show up in this list.'
+                      : 'Delivered orders will move here automatically.'}
+                  </p>
+                  {ordersTab === 'active' && (
+                    <button
+                      type="button"
+                      onClick={() => setActive('request')}
+                      className="agua-btn agua-btn-primary mt-5"
+                    >
+                      Place an order
+                    </button>
+                  )}
+                  {ordersTab === 'completed' && activeOrders.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setOrdersTab('active')}
+                      className="agua-btn agua-btn-secondary mt-5"
+                    >
+                      View active orders
+                    </button>
+                  )}
+                </div>
               ) : (
-                <div className="max-h-[600px] overflow-y-auto space-y-4 pr-1">
-                {[...orders].reverse().map(order => {
-                  const isWalkin = order.type === 'Walk-in / Pickup';
-
-                  // Define steps based on order type
-                  const steps = isWalkin
-                    ? ['Pending', 'Processing', 'Ready to Go']
-                    : ['Pending', 'Assigned', 'Out for Delivery', 'Delivered'];
-
-                  const stepIndex = {
-                    'Pending':            0,
-                    'Assigned':           1,
-                    'Accepted':           1,
-                    'Processing':         1,
-                    'Active':             1,
-                    'Out for Delivery':   2,
-                    'Ready':              2,
-                    'Ready to Go':        2,
-                    'Delivered':           3,
-                  };
-
-                  const currentStep = stepIndex[order.status] ?? 0;
-                  const isOutForDelivery = order.status === 'Out for Delivery';
-                  const canTrackLive = !isWalkin && (
-                    isOutForDelivery ||
-                    ['Assigned', 'Accepted', 'Processing'].includes(order.status)
-                  );
-
-                  const STEP_ICON = isWalkin
-                    ? ['🕐', '⚙️', '✅']
-                    : ['🕐', '🛵', '🚚', '✅'];
-
-                  const statusColor = STATUS_STYLE;
-
-                  return (
-                    <div key={order.id} className="agua-card p-5">
-                      {/* Order header */}
-                      <div className="flex items-start justify-between mb-4">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-sm font-bold text-[#0f172a]">
-                              {order.ref || order.id}
-                            </span>
-                            <span className={`agua-badge ${statusColor[order.status] || 'bg-slate-100 text-slate-500 ring-1 ring-slate-200/80'}`}>
-                              {order.status}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
-                            <span>{order.type}</span>
-                            <span>•</span>
-                            <span>{order.quantity} gallon{order.quantity > 1 ? 's' : ''}</span>
-                            <span>•</span>
-                            <span>{new Date(order.date).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-display text-lg font-bold text-accent2">{formatMoney(order.total)}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">
-                            {isWalkin ? 'Pay on arrival' : order.payMethod || 'Online payment'}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Status tracker */}
-                      <div className="flex items-center">
-                        {steps.map((label, i) => {
-                          const done   = currentStep > i;
-                          const active = currentStep === i;
-                          return (
-                            <div key={i} className="flex items-center flex-1 last:flex-none">
-                              <div className="flex flex-col items-center">
-                                <div className={`flex h-9 w-9 items-center justify-center rounded-full border-2 text-base transition
-                                  ${done    ? 'border-accent bg-accent text-white'
-                                  : active  ? 'border-accent bg-white text-accent2'
-                                           : 'border-slate-200 bg-white'}`}>
-                                  {done ? (
-                                    <span className="text-white text-sm">✓</span>
-                                  ) : (
-                                    <span className={active ? '' : 'grayscale opacity-40'}>
-                                      {STEP_ICON[i]}
-                                    </span>
-                                  )}
-                                </div>
-                                <span className={`mt-1.5 text-center text-xs font-semibold leading-tight
-                                  ${done ? 'text-accent2' : active ? 'text-ink' : 'text-slate-300'}`}>
-                                  {label}
-                                </span>
-                              </div>
-                              {i < steps.length - 1 && (
-                                <div className={`mx-2 mb-5 h-0.5 flex-1 rounded ${done ? 'bg-accent' : 'bg-slate-200'}`} />
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* Address/notes if delivery */}
-                      {!isWalkin && order.address && (
-                        <div className="mt-3 flex items-start gap-2 border-t border-slate-100 pt-3 text-xs text-muted">
-                          <MapPin size={14} className="mt-0.5 shrink-0 text-accent2" />
-                          <span>{order.address}</span>
-                        </div>
-                      )}
-
-                      {/* Live rider map — featured when Out for Delivery */}
-                      {canTrackLive && (
-                        <div className={`mt-3 pt-3 border-t ${isOutForDelivery ? 'border-emerald-100' : 'border-gray-100'}`}>
-                          {isOutForDelivery ? (
-                            <button
-                              type="button"
-                              onClick={() => setTrackingOrderId(trackingOrderId === order.id ? null : order.id)}
-                              className="flex w-full items-center justify-between gap-3 rounded-xl bg-emerald-600 px-4 py-3 text-white shadow-md shadow-emerald-600/20"
-                            >
-                              <span className="flex items-center gap-2 text-sm font-bold">
-                                <Radio size={16} className="animate-pulse" />
-                                {trackingOrderId === order.id ? 'Hide live map' : 'View live rider map'}
-                              </span>
-                              <MapPinned size={18} />
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => setTrackingOrderId(trackingOrderId === order.id ? null : order.id)}
-                              className="text-xs font-semibold text-accent2 hover:underline"
-                            >
-                              {trackingOrderId === order.id ? '▲ Hide map' : '🛵 Preview delivery map'}
-                            </button>
-                          )}
-
-                          {trackingOrderId === order.id && (
-                            (() => {
-                              const riderIsLive = rider?.lat != null && rider?.updatedAt &&
-                                (Date.now() - new Date(rider.updatedAt).getTime()) < RIDER_STALE_MS;
-                              const homePos = order.lat != null && order.lng != null
-                                ? [Number(order.lat), Number(order.lng)]
-                                : null;
-                              const riderPos = riderIsLive ? [rider.lat, rider.lng] : null;
-                              const center = riderPos || homePos || [10.3157, 123.9740];
-                              return (
-                                <div className="mt-3">
-                                  <div className={`h-64 sm:h-72 rounded-xl overflow-hidden border ${
-                                    isOutForDelivery ? 'border-emerald-200 shadow-lg shadow-emerald-500/10' : 'border-gray-200'
-                                  }`}>
-                                    <MapContainer
-                                      key={`track-${order.id}`}
-                                      center={center}
-                                      zoom={14}
-                                      style={{ height: '100%', width: '100%' }}
-                                    >
-                                      <TileLayer attribution={CARTO_ATTRIBUTION} url={cartoVoyagerUrl()} />
-                                      <FitBounds points={[riderPos, homePos]} />
-                                      {riderPos && <RecenterOnRider lat={riderPos[0]} lng={riderPos[1]} />}
-                                      {homePos && (
-                                        <Marker position={homePos} icon={homeIcon}>
-                                          <Popup>Your delivery address</Popup>
-                                        </Marker>
-                                      )}
-                                      {riderPos && (
-                                        <Marker position={riderPos} icon={riderIcon}>
-                                          <Popup>Your rider (live)</Popup>
-                                        </Marker>
-                                      )}
-                                      {trackRoute.length > 1 && (
-                                        <Polyline
-                                          positions={trackRoute}
-                                          pathOptions={{ color: '#3b82f6', weight: 5, opacity: 0.85 }}
-                                        />
-                                      )}
-                                    </MapContainer>
-                                  </div>
-                                  <div className={`mt-2 flex items-center justify-center gap-2 text-xs font-medium ${
-                                    riderIsLive ? 'text-emerald-600' : 'text-amber-600'
-                                  }`}>
-                                    <span className={`inline-block h-2 w-2 rounded-full ${
-                                      riderIsLive ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'
-                                    }`} />
-                                    {riderIsLive
-                                      ? 'Live rider location updating…'
-                                      : isOutForDelivery
-                                        ? 'Waiting for rider to share GPS…'
-                                        : 'Map shows your drop-off. Live rider appears when delivery starts.'}
-                                  </div>
-                                </div>
-                              );
-                            })()
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                <div className="space-y-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.06em] text-slate-400">
+                    {ordersTab === 'active' ? 'Active orders' : 'Completed orders'} · {ordersForTab.length}
+                  </p>
+                  <div className="max-h-[min(62vh,720px)] space-y-4 overflow-y-auto overscroll-contain pr-0.5">
+                    {ordersForTab.map((order) => (
+                      <OrderCard
+                        key={order.id}
+                        order={order}
+                        completed={ordersTab === 'completed'}
+                        trackingOrderId={trackingOrderId}
+                        setTrackingOrderId={setTrackingOrderId}
+                        rider={rider}
+                        trackRoute={trackRoute}
+                      />
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
