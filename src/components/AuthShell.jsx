@@ -17,7 +17,7 @@ export default function AuthShell({ children, title, subtitle }) {
               backgroundSize: '28px 28px, 42px 42px',
             }} />
             <div className="relative flex h-full flex-col justify-between p-10">
-              <BrandMark light size="lg" />
+              <BrandMark light size="lg" className="!max-w-[260px]" />
 
               <div className="agua-fade-up max-w-md">
                 <p className="font-display text-4xl font-bold leading-[1.1] tracking-tight">

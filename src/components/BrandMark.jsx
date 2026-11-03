@@ -1,28 +1,35 @@
-export default function BrandMark({ size = 'md', light = false }) {
-  const box =
-    size === 'lg'
-      ? 'h-14 w-14 rounded-2xl text-2xl'
-      : size === 'sm'
-        ? 'h-9 w-9 rounded-xl text-base'
-        : 'h-11 w-11 rounded-2xl text-lg';
+const SIZE = {
+  sm: { className: 'h-10 w-auto max-w-[148px]', alt: true },
+  md: { className: 'h-14 w-auto max-w-[180px]', alt: true },
+  lg: { className: 'h-[5.5rem] w-auto max-w-[240px]', alt: true },
+};
+
+/**
+ * AquaDoc logo — transparent PNG, no white/colored plate behind it.
+ * The artwork already includes the AquaDoc wordmark.
+ */
+export default function BrandMark({ size = 'md', light = false, iconOnly = false, className = '' }) {
+  const cfg = SIZE[size] || SIZE.md;
+
+  if (iconOnly) {
+    const box =
+      size === 'lg' ? 'h-14 w-14' : size === 'sm' ? 'h-9 w-9' : 'h-11 w-11';
+    return (
+      <img
+        src="/aguadoc-icon.png"
+        alt="AquaDoc"
+        className={`${box} object-contain ${className}`}
+        draggable={false}
+      />
+    );
+  }
 
   return (
-    <div className="flex items-center gap-3">
-      <div
-        className={`${box} flex items-center justify-center bg-blue-500 text-white shadow-lg shadow-blue-500/25`}
-      >
-        💧
-      </div>
-      <div className="min-w-0">
-        <p className={`font-display font-bold tracking-tight leading-none ${light ? 'text-white' : 'text-ink'} ${size === 'lg' ? 'text-2xl' : 'text-lg'}`}>
-          AguaDoc
-        </p>
-        {size !== 'sm' && (
-          <p className={`mt-1 text-[11px] font-medium ${light ? 'text-white/55' : 'text-muted'}`}>
-            Smart water delivery
-          </p>
-        )}
-      </div>
-    </div>
+    <img
+      src="/aguadoc-logo-ui.png"
+      alt="AquaDoc Water Refilling Station"
+      className={`${cfg.className} object-contain object-left ${className}`}
+      draggable={false}
+    />
   );
 }

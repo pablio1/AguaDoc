@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Info, MapPin, Crosshair, LocateFixed, Store, Truck, CheckCircle2,
   CreditCard, Banknote, ArrowRight, ArrowLeft, Minus, Plus, Droplets, Zap,
+  Sparkles, ShieldCheck,
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -13,8 +14,8 @@ import { CARTO_ATTRIBUTION, cartoVoyagerUrl } from '../lib/mapTiles';
 import { formatMoney } from '../lib/money';
 
 const PRICE_PER_GALLON = 40;
-const DELIVERY_FEE     = 20;
-const DEFAULT_CENTER   = { lat: 10.3157, lng: 123.9740 }; // Lapu-Lapu / AguaDoc area
+const DELIVERY_FEE = 20;
+const DEFAULT_CENTER = { lat: 10.3157, lng: 123.9740 }; // Lapu-Lapu / AguaDoc area
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -53,11 +54,11 @@ function RecenterOnPin({ lat, lng }) {
 
 function DeliveryPinMap({ pin, onPinChange }) {
   return (
-    <div className="relative overflow-hidden rounded-xl border border-slate-200/80 bg-slate-50 ring-1 ring-slate-100">
+    <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-inner">
       <MapContainer
         center={[pin.lat, pin.lng]}
         zoom={15}
-        style={{ height: 240, width: '100%' }}
+        style={{ height: 280, width: '100%' }}
         scrollWheelZoom={false}
       >
         <TileLayer attribution={CARTO_ATTRIBUTION} url={cartoVoyagerUrl()} />
@@ -75,126 +76,170 @@ function DeliveryPinMap({ pin, onPinChange }) {
           }}
         />
       </MapContainer>
-      <div className="pointer-events-none absolute bottom-2 left-2 right-2 z-[1000] flex justify-center">
-        <span className="rounded-full bg-white/95 px-3 py-1 text-[11px] font-medium text-muted shadow-sm ring-1 ring-slate-200/80">
-          Drag the pin or tap the map to set delivery point
+      <div className="pointer-events-none absolute bottom-3 left-3 right-3 z-[1000] flex justify-center">
+        <span className="rounded-full bg-white/95 px-3.5 py-1.5 text-[11px] font-semibold text-slate-600 shadow-md ring-1 ring-slate-200/80">
+          Drag the pin or tap the map
         </span>
       </div>
     </div>
   );
 }
 
-// ── Step indicator ──
 function StepBar({ step, isWalkin }) {
   const steps = isWalkin
     ? ['Order type', 'Details']
     : ['Order type', 'Details', 'Review & pay'];
+
   return (
-    <div className="mb-8 flex items-center gap-2">
-      {steps.map((label, i) => {
-        const num    = i + 1;
-        const active = step === num;
-        const done   = step > num;
-        return (
-          <div key={i} className="flex flex-1 items-center gap-2 last:flex-none">
-            <div className="flex shrink-0 items-center gap-2">
-              <div className={`flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-bold transition ${
-                done  ? 'border-accent bg-accent text-white'
-                : active ? 'border-accent bg-white text-accent2'
-                         : 'border-slate-200 bg-white text-slate-400'
-              }`}>
-                {done ? '✓' : num}
+    <div className="mb-7">
+      <div className="mb-3 flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">
+        <span>Step {Math.min(step, steps.length)} of {steps.length}</span>
+        <span className="text-blue-600">{steps[Math.min(step, steps.length) - 1]}</span>
+      </div>
+      <div className="mb-4 h-1.5 overflow-hidden rounded-full bg-slate-100">
+        <div
+          className="h-full rounded-full bg-blue-500 transition-all duration-300"
+          style={{ width: `${(Math.min(step, steps.length) / steps.length) * 100}%` }}
+        />
+      </div>
+      <div className="flex items-center gap-2">
+        {steps.map((label, i) => {
+          const num = i + 1;
+          const active = step === num;
+          const done = step > num;
+          return (
+            <div key={label} className="flex flex-1 items-center gap-2 last:flex-none">
+              <div className="flex shrink-0 items-center gap-2">
+                <div
+                  className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition ${
+                    done
+                      ? 'bg-blue-500 text-white shadow-sm shadow-blue-500/30'
+                      : active
+                        ? 'bg-blue-50 text-blue-600 ring-2 ring-blue-500'
+                        : 'bg-slate-100 text-slate-400'
+                  }`}
+                >
+                  {done ? <CheckCircle2 size={15} /> : num}
+                </div>
+                <span className={`hidden text-xs font-semibold sm:block ${
+                  active ? 'text-ink' : done ? 'text-muted' : 'text-slate-300'
+                }`}>
+                  {label}
+                </span>
               </div>
-              <span className={`hidden text-xs font-semibold sm:block ${
-                active ? 'text-accent2' : done ? 'text-muted' : 'text-slate-300'
-              }`}>
-                {label}
-              </span>
+              {i < steps.length - 1 && (
+                <div className={`mx-1 h-0.5 flex-1 rounded ${done ? 'bg-blue-500' : 'bg-slate-200'}`} />
+              )}
             </div>
-            {i < steps.length - 1 && (
-              <div className={`mx-1 h-0.5 flex-1 rounded ${done ? 'bg-accent' : 'bg-slate-200'}`} />
-            )}
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-// ── Order type card ──
-function OrderTypeCard({ icon: Icon, title, subtitle, selected, onClick }) {
+function OrderTypeCard({ icon: Icon, title, subtitle, hint, selected, onClick }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`flex flex-1 cursor-pointer rounded-2xl border-2 p-4 text-left transition ${
+      className={`relative flex flex-1 flex-col rounded-2xl border-2 p-5 text-left transition ${
         selected
-          ? 'border-accent bg-mist ring-2 ring-blue-500/15'
-          : 'border-slate-200/80 bg-white hover:border-accent/40'
+          ? 'border-blue-500 bg-blue-50/70 shadow-md shadow-blue-500/10'
+          : 'border-slate-200 bg-white hover:border-blue-300 hover:shadow-sm'
       }`}
     >
-      <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-xl ${
-        selected ? 'bg-blue-500 text-white shadow-md shadow-blue-500/25' : 'bg-slate-100 text-slate-500'
+      {selected && (
+        <span className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-full bg-blue-500 text-white">
+          <CheckCircle2 size={14} />
+        </span>
+      )}
+      <div className={`mb-4 flex h-12 w-12 items-center justify-center rounded-2xl ${
+        selected ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/25' : 'bg-slate-100 text-slate-500'
       }`}>
-        <Icon size={20} />
+        <Icon size={22} />
       </div>
-      <div className="text-sm font-bold text-ink">{title}</div>
-      <div className="mt-0.5 text-xs text-muted">{subtitle}</div>
+      <p className="text-base font-bold text-ink">{title}</p>
+      <p className={`mt-1 text-sm font-semibold ${selected ? 'text-blue-600' : 'text-muted'}`}>{subtitle}</p>
+      {hint && <p className="mt-2 text-xs leading-relaxed text-muted">{hint}</p>}
     </button>
   );
 }
 
-// ── Priority badge ──
-function PriorityBadge({ value, label, icon: Icon, selected, onClick }) {
+function PriorityBadge({ value, label, description, icon: Icon, selected, onClick }) {
   return (
     <button
       type="button"
       onClick={() => onClick(value)}
-      className={`flex cursor-pointer items-center gap-2 rounded-xl border-2 px-4 py-2.5 text-sm font-semibold transition ${
+      className={`flex flex-1 items-start gap-3 rounded-2xl border-2 px-4 py-3.5 text-left transition ${
         selected
-          ? 'border-accent bg-mist text-accent2'
-          : 'border-slate-200/80 bg-white text-muted hover:border-accent/40'
+          ? 'border-blue-500 bg-blue-50/70 text-ink'
+          : 'border-slate-200 bg-white text-muted hover:border-blue-300'
       }`}
     >
-      <Icon size={16} />{label}
+      <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+        selected ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-500'
+      }`}>
+        <Icon size={16} />
+      </span>
+      <span>
+        <span className="block text-sm font-bold text-ink">{label}</span>
+        <span className="mt-0.5 block text-xs text-muted">{description}</span>
+      </span>
     </button>
   );
 }
 
-function SummaryBlock({ children }) {
+function SummaryBlock({ children, total }) {
   return (
-    <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 p-4">
-      <p className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Order summary</p>
-      {children}
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white">
+      <div className="border-b border-slate-100 px-4 py-3">
+        <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">Order summary</p>
+      </div>
+      <div className="space-y-2.5 px-4 py-4 text-sm">{children}</div>
+      {total != null && (
+        <div className="flex items-center justify-between border-t border-slate-100 bg-blue-50/50 px-4 py-3.5">
+          <span className="text-sm font-bold text-ink">Total due</span>
+          <span className="font-display text-xl font-bold text-blue-600">{formatMoney(total)}</span>
+        </div>
+      )}
     </div>
   );
 }
 
+function SectionLabel({ children, required }) {
+  return (
+    <p className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">
+      {children}
+      {required && <span className="ml-1 text-blue-500">*</span>}
+    </p>
+  );
+}
+
 export default function RequestServicePage({ user, onOrderPlaced }) {
-  const [step,     setStep]     = useState(1);
-  const [orderType, setOrderType] = useState('');   // 'walkin' | 'delivery'
-  const [priority,  setPriority]  = useState('normal');
-  const [quantity,  setQuantity]  = useState(1);
-  const [address,   setAddress]   = useState(user?.address || '');
-  const [notes,     setNotes]     = useState('');
+  const [step, setStep] = useState(1);
+  const [orderType, setOrderType] = useState(''); // 'walkin' | 'delivery'
+  const [priority, setPriority] = useState('normal');
+  const [quantity, setQuantity] = useState(1);
+  const [address, setAddress] = useState(user?.address || '');
+  const [notes, setNotes] = useState('');
   const [pin, setPin] = useState(DEFAULT_CENTER);
   const [pinReady, setPinReady] = useState(false);
   const [geoBusy, setGeoBusy] = useState(false);
-  const [loading,   setLoading]   = useState(false);
-  const [success,   setSuccess]   = useState(false);
-  const [error,     setError]     = useState('');
-  const [payMode,   setPayMode]   = useState('online'); // 'online' | 'cod' — delivery only
-  const [showTerms, setShowTerms]  = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState('');
+  const [payMode, setPayMode] = useState('online'); // 'online' | 'cod'
+  const [showTerms, setShowTerms] = useState(false);
   const skipNextGeocode = useRef(false);
   const addressTimer = useRef(null);
 
-  const isWalkin   = orderType === 'walkin';
+  const isWalkin = orderType === 'walkin';
   const isDelivery = orderType === 'delivery';
-  const subtotal   = quantity * PRICE_PER_GALLON;
+  const subtotal = quantity * PRICE_PER_GALLON;
   const deliveryFee = isDelivery ? DELIVERY_FEE : 0;
-  const total      = subtotal + deliveryFee;
+  const total = subtotal + deliveryFee;
 
-  // Seed pin from profile address or device GPS once delivery is chosen
   useEffect(() => {
     if (!isDelivery || pinReady) return;
     let cancelled = false;
@@ -242,7 +287,6 @@ export default function RequestServicePage({ user, onOrderPlaced }) {
     finally { setGeoBusy(false); }
   }, []);
 
-  // When the customer edits the address text, move the pin (debounced)
   function handleAddressChange(value) {
     setAddress(value);
     if (skipNextGeocode.current) {
@@ -282,7 +326,6 @@ export default function RequestServicePage({ user, onOrderPlaced }) {
     );
   }
 
-  // ── Navigation ──
   function goNext() {
     setError('');
     if (step === 1 && !orderType) { setError('Please select an order type.'); return; }
@@ -290,243 +333,296 @@ export default function RequestServicePage({ user, onOrderPlaced }) {
       if (!address.trim()) { setError('Please enter a delivery address.'); return; }
       if (pin.lat == null || pin.lng == null) { setError('Please set a delivery pin on the map.'); return; }
     }
-    setStep(s => s + 1);
+    setStep((s) => s + 1);
   }
-  function goBack() { setError(''); setStep(s => s - 1); }
 
-  // ── Walk-in: pay on arrival, no gateway involved ──
+  function goBack() { setError(''); setStep((s) => s - 1); }
+
   async function handleConfirmWalkin() {
-  setLoading(true);
-  try {
-    await apiAddOrder({
-      userId:      user.id,
-      type:        'Walk-in / Pickup',
-      priority,
-      quantity,
-      address:     'Walk-in',
-      notes,
-      payMethod:   'Pay on arrival',
-      total,
-      status:      'Pending',
-    });
-    setSuccess(true);
-    onOrderPlaced?.();
-  } catch {
-    setError('Failed to place order. Please try again.');
-  } finally {
-    setLoading(false);
+    setLoading(true);
+    try {
+      await apiAddOrder({
+        userId: user.id,
+        type: 'Walk-in / Pickup',
+        priority,
+        quantity,
+        address: 'Walk-in',
+        notes,
+        payMethod: 'Pay on arrival',
+        total,
+        status: 'Pending',
+      });
+      setSuccess(true);
+      onOrderPlaced?.();
+    } catch {
+      setError('Failed to place order. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   }
-}
 
-  // ── Delivery, Cash on Delivery: pay the rider directly, no gateway involved ──
   async function handleConfirmCOD() {
-  setLoading(true);
-  setError('');
-  try {
-    await apiAddOrder({
-      userId:      user.id,
-      type:        'Delivery',
-      priority,
-      quantity,
-      address,
-      notes,
-      payMethod:   'Cash on Delivery',
-      total,
-      status:      'Pending',
-      lat: pin.lat,
-      lng: pin.lng,
-    });
-    setSuccess(true);
-    onOrderPlaced?.();
-  } catch {
-    setError('Failed to place order. Please try again.');
-  } finally {
-    setLoading(false);
+    setLoading(true);
+    setError('');
+    try {
+      await apiAddOrder({
+        userId: user.id,
+        type: 'Delivery',
+        priority,
+        quantity,
+        address,
+        notes,
+        payMethod: 'Cash on Delivery',
+        total,
+        status: 'Pending',
+        lat: pin.lat,
+        lng: pin.lng,
+      });
+      setSuccess(true);
+      onOrderPlaced?.();
+    } catch {
+      setError('Failed to place order. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   }
-}
 
-  // ── Delivery, pay online now: real GCash/Maya payment via Xendit — leaves this page entirely ──
   async function handlePayNow() {
-  setLoading(true);
-  setError('');
-  try {
-    const { checkoutUrl } = await apiCreateCheckout({
-      userId:   user.id,
-      type:     'Delivery',
-      priority,
-      quantity,
-      address,
-      notes,
-      total,
-      lat: pin.lat,
-      lng: pin.lng,
-    });
-    window.location.href = checkoutUrl; // hand off to Xendit's hosted payment page
-  } catch {
-    setError('Could not start payment. Please try again.');
-    setLoading(false);
+    setLoading(true);
+    setError('');
+    try {
+      const { checkoutUrl } = await apiCreateCheckout({
+        userId: user.id,
+        type: 'Delivery',
+        priority,
+        quantity,
+        address,
+        notes,
+        total,
+        lat: pin.lat,
+        lng: pin.lng,
+      });
+      window.location.href = checkoutUrl;
+    } catch {
+      setError('Could not start payment. Please try again.');
+      setLoading(false);
+    }
   }
-}
 
-  // ── Success screen (walk-in and COD-delivery only — online-payment success is shown after returning from Xendit) ──
+  function resetForm() {
+    setSuccess(false);
+    setStep(1);
+    setOrderType('');
+    setPriority('normal');
+    setQuantity(1);
+    setAddress(user?.address || '');
+    setNotes('');
+    setPayMode('online');
+    setPin(DEFAULT_CENTER);
+    setPinReady(false);
+    setError('');
+  }
+
   if (success) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100">
-          <CheckCircle2 size={40} />
+      <div className="mx-auto max-w-lg">
+        <div className="agua-card overflow-hidden text-center">
+          <div className="bg-gradient-to-b from-emerald-50 to-white px-6 pb-2 pt-10">
+            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/30">
+              <CheckCircle2 size={40} />
+            </div>
+            <h2 className="font-display text-2xl font-bold text-ink">Order placed</h2>
+            <p className="mx-auto mt-2 max-w-sm text-sm text-muted">
+              {isWalkin
+                ? 'Your walk-in order is confirmed. Pay when you arrive at the station.'
+                : 'Your delivery is confirmed. Please have cash ready for the rider.'}
+            </p>
+          </div>
+          <div className="space-y-3 px-6 py-6 text-left text-sm">
+            <div className="flex justify-between rounded-xl bg-slate-50 px-4 py-3">
+              <span className="text-muted">Type</span>
+              <span className="font-semibold text-ink">
+                {isWalkin ? 'Walk-in / Pickup' : 'Delivery · Cash on delivery'}
+              </span>
+            </div>
+            <div className="flex justify-between rounded-xl bg-slate-50 px-4 py-3">
+              <span className="text-muted">Gallons</span>
+              <span className="font-semibold text-ink">{quantity}</span>
+            </div>
+            <div className="flex justify-between rounded-xl bg-blue-50 px-4 py-3">
+              <span className="font-semibold text-ink">Total</span>
+              <span className="font-display text-lg font-bold text-blue-600">{formatMoney(total)}</span>
+            </div>
+          </div>
+          <div className="border-t border-slate-100 px-6 py-5">
+            <button type="button" onClick={resetForm} className="agua-btn agua-btn-primary w-full">
+              Place another order
+            </button>
+          </div>
         </div>
-        <h2 className="font-display text-xl font-bold text-ink">Order placed</h2>
-        <p className="mb-6 mt-2 max-w-sm text-sm text-muted">
-          {isWalkin
-            ? 'Your walk-in order has been received. Please pay when you arrive.'
-            : 'Your delivery order has been received. Please have the payment ready for the rider.'}
-        </p>
-        <div className="agua-card mb-6 min-w-[260px] space-y-2 px-8 py-5 text-left text-sm">
-          <div className="flex justify-between"><span className="text-muted">Type</span><span className="font-semibold">{isWalkin ? 'Walk-in / Pickup' : 'Delivery (Cash on Delivery)'}</span></div>
-          <div className="flex justify-between"><span className="text-muted">Gallons</span><span className="font-semibold">{quantity}</span></div>
-          <div className="flex justify-between"><span className="text-muted">Total</span><span className="font-bold text-accent2">{formatMoney(total)}</span></div>
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            setSuccess(false); setStep(1); setOrderType(''); setPriority('normal'); setQuantity(1);
-            setAddress(user?.address || ''); setNotes(''); setPayMode('online');
-            setPin(DEFAULT_CENTER); setPinReady(false);
-          }}
-          className="agua-btn agua-btn-primary"
-        >
-          Place another order
-        </button>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <div className="mb-5">
-        <h2 className="font-display text-2xl font-bold tracking-tight text-ink">Request an order</h2>
-        <p className="mt-1 text-sm text-muted">
-          {isWalkin ? 'Two steps' : 'Three steps'} — delivery, walk-in, and payment options
-        </p>
+    <div className="mx-auto max-w-2xl space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="font-display text-2xl font-bold tracking-tight text-ink">Request service</h2>
+          <p className="mt-1 text-sm text-muted">
+            Order a refill for pickup or doorstep delivery in a few quick steps.
+          </p>
+        </div>
+        <div className="inline-flex items-center gap-1.5 self-start rounded-full bg-blue-50 px-3 py-1.5 text-[11px] font-semibold text-blue-700 ring-1 ring-blue-100 sm:self-auto">
+          <Sparkles size={12} />
+          {formatMoney(PRICE_PER_GALLON)} / gallon
+        </div>
       </div>
 
-      <div className="agua-card p-5 sm:p-6">
+      <div className="agua-card p-5 sm:p-7">
         <StepBar step={step} isWalkin={isWalkin} />
 
-        {/* ── STEP 1: Order Type ── */}
+        {/* STEP 1 */}
         {step === 1 && (
-          <div>
-            <p className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Choose order type *</p>
-            <div className="mb-6 flex gap-3">
-              <OrderTypeCard
-                icon={Store}
-                title="Walk-in / Pickup"
-                subtitle="Free"
-                selected={orderType === 'walkin'}
-                onClick={() => { setOrderType('walkin'); setError(''); }}
-              />
-              <OrderTypeCard
-                icon={Truck}
-                title="Delivery"
-                subtitle={`+ ${formatMoney(DELIVERY_FEE)}`}
-                selected={orderType === 'delivery'}
-                onClick={() => { setOrderType('delivery'); setError(''); setPinReady(false); }}
-              />
+          <div className="space-y-6">
+            <div>
+              <SectionLabel required>How do you want your water?</SectionLabel>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <OrderTypeCard
+                  icon={Store}
+                  title="Walk-in / Pickup"
+                  subtitle="Free · No delivery fee"
+                  hint="Order ahead and pay when you arrive at the station."
+                  selected={orderType === 'walkin'}
+                  onClick={() => { setOrderType('walkin'); setError(''); }}
+                />
+                <OrderTypeCard
+                  icon={Truck}
+                  title="Home delivery"
+                  subtitle={`+ ${formatMoney(DELIVERY_FEE)} delivery`}
+                  hint="We bring gallons to your pin. Track the rider live."
+                  selected={orderType === 'delivery'}
+                  onClick={() => { setOrderType('delivery'); setError(''); setPinReady(false); }}
+                />
+              </div>
             </div>
 
             {orderType && (
-              <div>
-                <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">Priority</p>
-                <div className="flex flex-wrap gap-2">
-                  <PriorityBadge value="normal" label="Normal" icon={Droplets} selected={priority === 'normal'} onClick={setPriority} />
-                  <PriorityBadge value="priority" label="Priority" icon={Zap} selected={priority === 'priority'} onClick={setPriority} />
+              <div className="agua-fade-up">
+                <SectionLabel>Priority</SectionLabel>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <PriorityBadge
+                    value="normal"
+                    label="Normal"
+                    description="Standard queue · best value"
+                    icon={Droplets}
+                    selected={priority === 'normal'}
+                    onClick={setPriority}
+                  />
+                  <PriorityBadge
+                    value="priority"
+                    label="Priority"
+                    description="Handled sooner when possible"
+                    icon={Zap}
+                    selected={priority === 'priority'}
+                    onClick={setPriority}
+                  />
                 </div>
               </div>
             )}
 
-            {error && <p className="mt-3 text-xs font-medium text-red-600">{error}</p>}
+            {error && (
+              <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-600 ring-1 ring-red-100">
+                {error}
+              </p>
+            )}
 
-            <div className="mt-6 flex justify-end">
-              <button type="button" onClick={goNext} disabled={!orderType}
-                className="agua-btn agua-btn-primary disabled:opacity-40">
-                Next <ArrowRight size={16} />
+            <div className="flex justify-end border-t border-slate-100 pt-5">
+              <button
+                type="button"
+                onClick={goNext}
+                disabled={!orderType}
+                className="agua-btn agua-btn-primary disabled:opacity-40"
+              >
+                Continue <ArrowRight size={16} />
               </button>
             </div>
           </div>
         )}
 
-        {/* ── STEP 2: Order Details ── */}
+        {/* STEP 2 */}
         {step === 2 && (
-          <div>
-            <p className="mb-4 text-xs font-bold uppercase tracking-wide text-muted">Order details</p>
-
-            <div className="mb-4">
-              <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-muted">
-                Quantity of gallons *
-              </label>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setQuantity(q => Math.max(1, q - 1))}
-                  className="flex h-10 w-10 items-center justify-center rounded-xl border-2 border-slate-200 text-slate-600 transition hover:border-accent"
-                ><Minus size={18} /></button>
-                <span className="w-10 text-center font-display text-xl font-bold text-ink">{quantity}</span>
-                <button
-                  type="button"
-                  onClick={() => setQuantity(q => q + 1)}
-                  className="flex h-10 w-10 items-center justify-center rounded-xl border-2 border-slate-200 text-slate-600 transition hover:border-accent"
-                ><Plus size={18} /></button>
-                <span className="ml-1 flex items-center gap-1 text-sm text-muted"><Droplets size={14} /> gallons</span>
+          <div className="space-y-5">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+              <SectionLabel required>How many gallons?</SectionLabel>
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                    className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-blue-300 hover:text-blue-600"
+                  >
+                    <Minus size={18} />
+                  </button>
+                  <div className="min-w-[4.5rem] text-center">
+                    <p className="font-display text-3xl font-bold text-ink">{quantity}</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">gallons</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setQuantity((q) => q + 1)}
+                    className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-blue-300 hover:text-blue-600"
+                  >
+                    <Plus size={18} />
+                  </button>
+                </div>
+                <div className="rounded-xl bg-white px-3 py-2 text-right shadow-sm ring-1 ring-slate-100">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Subtotal</p>
+                  <p className="font-display text-lg font-bold text-blue-600">{formatMoney(subtotal)}</p>
+                </div>
               </div>
             </div>
 
             {isDelivery && (
               <>
-                <div className="mb-4">
-                  <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-muted">
-                    Delivery location / complete address *
-                  </label>
+                <div>
+                  <SectionLabel required>Delivery address</SectionLabel>
                   <input
                     value={address}
-                    onChange={e => handleAddressChange(e.target.value)}
-                    placeholder="e.g. Purok 3, Brgy. Cambaro, Mandaue City"
+                    onChange={(e) => handleAddressChange(e.target.value)}
+                    placeholder="e.g. Purok 3, Brgy. Basak, Lapu-Lapu City"
                     className="agua-input"
                   />
                 </div>
 
-                <div className="mb-4">
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-muted">
-                      <MapPin size={13} className="text-accent2" />
-                      Pin delivery point *
-                    </label>
+                <div>
+                  <div className="mb-2.5 flex items-center justify-between gap-2">
+                    <SectionLabel required>Pin on the map</SectionLabel>
                     <button
                       type="button"
                       onClick={useMyLocation}
                       disabled={geoBusy}
-                      className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-mist px-2.5 py-1 text-[11px] font-semibold text-accent2 hover:bg-blue-100/80 disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1.5 text-[11px] font-semibold text-blue-700 ring-1 ring-blue-100 transition hover:bg-blue-100 disabled:opacity-50"
                     >
                       <LocateFixed size={12} />
-                      Use my location
+                      Use my GPS
                     </button>
                   </div>
                   <DeliveryPinMap pin={pin} onPinChange={(p) => applyPin(p)} />
-                  <p className="mt-1.5 flex items-center gap-1 text-[11px] text-muted">
-                    <Crosshair size={11} />
+                  <p className="mt-2 flex items-center gap-1.5 text-[11px] text-muted">
+                    <Crosshair size={12} className="text-blue-500" />
                     {geoBusy
                       ? 'Updating location…'
                       : `${pin.lat.toFixed(5)}, ${pin.lng.toFixed(5)}`}
                   </p>
                 </div>
 
-                <div className="mb-4">
-                  <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-muted">
-                    Delivery notes / instructions
-                  </label>
+                <div>
+                  <SectionLabel>Delivery notes</SectionLabel>
                   <textarea
                     value={notes}
-                    onChange={e => setNotes(e.target.value)}
-                    placeholder="e.g. Leave at the gate, call upon arrival..."
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="e.g. Leave at the gate, call upon arrival…"
                     rows={2}
                     className="agua-input resize-none"
                   />
@@ -535,45 +631,56 @@ export default function RequestServicePage({ user, onOrderPlaced }) {
             )}
 
             {isWalkin && (
-              <div className="mb-4 rounded-xl border border-blue-100 bg-mist px-4 py-3 text-sm text-accent2">
-                Walk-in orders are paid upon arrival at the station.
+              <div className="flex items-start gap-3 rounded-2xl border border-blue-100 bg-blue-50/80 px-4 py-3.5">
+                <Store size={18} className="mt-0.5 shrink-0 text-blue-600" />
+                <div>
+                  <p className="text-sm font-semibold text-ink">Pickup at the station</p>
+                  <p className="mt-0.5 text-xs text-muted">
+                    Pay on arrival — no online payment needed for walk-in orders.
+                  </p>
+                </div>
               </div>
             )}
 
-            <SummaryBlock>
-              <div className="space-y-1.5 text-sm">
-                <div className="flex justify-between text-muted">
-                  <span>Gallons ({quantity})</span>
-                  <span>{formatMoney(subtotal)}</span>
-                </div>
-                {isDelivery && (
-                  <div className="flex justify-between text-muted">
-                    <span>Delivery fee</span>
-                    <span>{formatMoney(deliveryFee)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between border-t border-slate-200 pt-2 font-bold text-ink">
-                  <span>Total</span>
-                  <span className="text-accent2">{formatMoney(total)}</span>
-                </div>
+            <SummaryBlock total={total}>
+              <div className="flex justify-between text-muted">
+                <span>Gallons ({quantity} × {formatMoney(PRICE_PER_GALLON)})</span>
+                <span className="font-medium text-ink">{formatMoney(subtotal)}</span>
               </div>
+              {isDelivery && (
+                <div className="flex justify-between text-muted">
+                  <span>Delivery fee</span>
+                  <span className="font-medium text-ink">{formatMoney(deliveryFee)}</span>
+                </div>
+              )}
+              {priority === 'priority' && (
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700">
+                  <Zap size={12} /> Priority handling requested
+                </div>
+              )}
             </SummaryBlock>
 
-            {error && <p className="mb-3 mt-3 text-xs font-medium text-red-600">{error}</p>}
+            {error && (
+              <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-600 ring-1 ring-red-100">
+                {error}
+              </p>
+            )}
 
-            <div className="mt-6 flex justify-between gap-3">
-              <button type="button" onClick={goBack}
-                className="agua-btn agua-btn-secondary">
+            <div className="flex justify-between gap-3 border-t border-slate-100 pt-5">
+              <button type="button" onClick={goBack} className="agua-btn agua-btn-secondary">
                 <ArrowLeft size={16} /> Back
               </button>
               {isWalkin ? (
-                <button type="button" onClick={handleConfirmWalkin} disabled={loading}
-                  className="agua-btn agua-btn-primary disabled:opacity-60">
+                <button
+                  type="button"
+                  onClick={handleConfirmWalkin}
+                  disabled={loading}
+                  className="agua-btn agua-btn-primary disabled:opacity-60"
+                >
                   {loading ? 'Placing…' : 'Confirm order'}
                 </button>
               ) : (
-                <button type="button" onClick={goNext}
-                  className="agua-btn agua-btn-primary">
+                <button type="button" onClick={goNext} className="agua-btn agua-btn-primary">
                   Review & pay <ArrowRight size={16} />
                 </button>
               )}
@@ -581,99 +688,145 @@ export default function RequestServicePage({ user, onOrderPlaced }) {
           </div>
         )}
 
-        {/* ── STEP 3: Review & Pay (Delivery only) ── */}
+        {/* STEP 3 */}
         {step === 3 && (
-          <div>
-            <p className="mb-4 text-xs font-bold uppercase tracking-wide text-muted">Review & payment</p>
+          <div className="space-y-5">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+              <div className="mb-3 flex items-center gap-2">
+                <Truck size={16} className="text-blue-600" />
+                <p className="text-sm font-bold text-ink">Delivery overview</p>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted">Address</span>
+                  <span className="max-w-[60%] text-right font-medium text-ink">{address || '—'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted">Map pin</span>
+                  <span className="font-mono text-xs text-muted">
+                    {pin.lat.toFixed(5)}, {pin.lng.toFixed(5)}
+                  </span>
+                </div>
+                {notes.trim() && (
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted">Notes</span>
+                    <span className="max-w-[60%] text-right text-ink">{notes}</span>
+                  </div>
+                )}
+              </div>
+            </div>
 
-            <SummaryBlock>
-              <div className="space-y-1.5 text-sm">
-                <div className="flex justify-between text-muted">
-                  <span>Gallons ({quantity})</span><span>{formatMoney(subtotal)}</span>
-                </div>
-                <div className="flex justify-between text-muted">
-                  <span>Delivery fee</span><span>{formatMoney(deliveryFee)}</span>
-                </div>
-                <div className="flex justify-between gap-3 text-muted">
-                  <span className="shrink-0">Address</span>
-                  <span className="max-w-[55%] text-right text-muted">{address}</span>
-                </div>
-                <div className="flex justify-between text-muted">
-                  <span>Map pin</span>
-                  <span className="font-mono text-xs text-muted">{pin.lat.toFixed(5)}, {pin.lng.toFixed(5)}</span>
-                </div>
-                <div className="flex justify-between border-t border-slate-200 pt-2 font-bold text-ink">
-                  <span>Total</span>
-                  <span className="text-accent2">{formatMoney(total)}</span>
-                </div>
+            <SummaryBlock total={total}>
+              <div className="flex justify-between text-muted">
+                <span>Gallons ({quantity})</span>
+                <span className="font-medium text-ink">{formatMoney(subtotal)}</span>
+              </div>
+              <div className="flex justify-between text-muted">
+                <span>Delivery fee</span>
+                <span className="font-medium text-ink">{formatMoney(deliveryFee)}</span>
               </div>
             </SummaryBlock>
 
-            <div className="mb-4 mt-5">
-              <div className="mb-3 flex items-center gap-1.5">
-                <p className="text-xs font-bold uppercase tracking-wide text-muted">Payment method</p>
+            <div>
+              <div className="mb-2.5 flex items-center gap-1.5">
+                <SectionLabel required>Payment method</SectionLabel>
                 <button
                   type="button"
                   onClick={() => setShowTerms(true)}
-                  title="Terms & Agreement (credit / utang)"
-                  className="text-slate-400 hover:text-accent2"
+                  title="Terms & Agreement"
+                  className="-mt-2 text-slate-400 transition hover:text-blue-600"
                 >
                   <Info size={14} />
                 </button>
               </div>
-              <div className="mb-3 flex gap-3">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <button
                   type="button"
                   onClick={() => setPayMode('online')}
-                  className={`flex flex-1 cursor-pointer rounded-xl border-2 p-3 text-left transition ${
-                    payMode === 'online' ? 'border-accent bg-mist ring-2 ring-blue-500/15' : 'border-slate-200/80 bg-white hover:border-accent/40'
+                  className={`relative rounded-2xl border-2 p-4 text-left transition ${
+                    payMode === 'online'
+                      ? 'border-blue-500 bg-blue-50/70 shadow-sm'
+                      : 'border-slate-200 bg-white hover:border-blue-300'
                   }`}
                 >
-                  <CreditCard size={20} className="mb-2 text-accent2" />
-                  <div className="text-sm font-bold text-ink">Pay online now</div>
-                  <div className="mt-0.5 text-xs text-muted">GCash or Maya</div>
+                  {payMode === 'online' && (
+                    <span className="absolute right-3 top-3 text-blue-500">
+                      <CheckCircle2 size={18} />
+                    </span>
+                  )}
+                  <CreditCard size={22} className="mb-3 text-blue-600" />
+                  <p className="text-sm font-bold text-ink">Pay online now</p>
+                  <p className="mt-1 text-xs text-muted">GCash or Maya via Xendit</p>
                 </button>
                 <button
                   type="button"
                   onClick={() => setPayMode('cod')}
-                  className={`flex flex-1 cursor-pointer rounded-xl border-2 p-3 text-left transition ${
-                    payMode === 'cod' ? 'border-accent bg-mist ring-2 ring-blue-500/15' : 'border-slate-200/80 bg-white hover:border-accent/40'
+                  className={`relative rounded-2xl border-2 p-4 text-left transition ${
+                    payMode === 'cod'
+                      ? 'border-blue-500 bg-blue-50/70 shadow-sm'
+                      : 'border-slate-200 bg-white hover:border-blue-300'
                   }`}
                 >
-                  <Banknote size={20} className="mb-2 text-emerald-600" />
-                  <div className="text-sm font-bold text-ink">Cash on delivery</div>
-                  <div className="mt-0.5 text-xs text-muted">Pay the rider</div>
+                  {payMode === 'cod' && (
+                    <span className="absolute right-3 top-3 text-blue-500">
+                      <CheckCircle2 size={18} />
+                    </span>
+                  )}
+                  <Banknote size={22} className="mb-3 text-emerald-600" />
+                  <p className="text-sm font-bold text-ink">Cash on delivery</p>
+                  <p className="mt-1 text-xs text-muted">Pay the rider at your door</p>
                 </button>
               </div>
 
               {payMode === 'online' ? (
-                <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 p-4 text-center">
-                  <p className="mb-1 text-sm text-muted">You&apos;ll be taken to a secure Xendit page to pay via</p>
-                  <p className="mb-3 text-sm font-bold text-ink">GCash or Maya</p>
-                  <p className="text-xs text-muted">Your order is only confirmed once payment goes through — no manual reference number needed.</p>
+                <div className="mt-3 flex items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3.5">
+                  <ShieldCheck size={18} className="mt-0.5 shrink-0 text-blue-600" />
+                  <div>
+                    <p className="text-sm font-semibold text-ink">Secure checkout</p>
+                    <p className="mt-0.5 text-xs leading-relaxed text-muted">
+                      You&apos;ll open a Xendit page to pay with GCash or Maya. The order confirms only after payment succeeds.
+                    </p>
+                  </div>
                 </div>
               ) : (
-                <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 p-4 text-center">
-                  <p className="text-sm text-muted">Have <span className="font-bold text-ink">{formatMoney(total)}</span> ready in cash for the rider when your order arrives.</p>
+                <div className="mt-3 flex items-start gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/80 px-4 py-3.5">
+                  <Banknote size={18} className="mt-0.5 shrink-0 text-emerald-600" />
+                  <div>
+                    <p className="text-sm font-semibold text-ink">Prepare cash</p>
+                    <p className="mt-0.5 text-xs leading-relaxed text-muted">
+                      Have <span className="font-bold text-ink">{formatMoney(total)}</span> ready when the rider arrives.
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
 
-            {error && <p className="mb-3 text-xs font-medium text-red-600">{error}</p>}
+            {error && (
+              <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-600 ring-1 ring-red-100">
+                {error}
+              </p>
+            )}
 
-            <div className="flex justify-between gap-3">
-              <button type="button" onClick={goBack}
-                className="agua-btn agua-btn-secondary">
+            <div className="flex justify-between gap-3 border-t border-slate-100 pt-5">
+              <button type="button" onClick={goBack} className="agua-btn agua-btn-secondary">
                 <ArrowLeft size={16} /> Back
               </button>
               {payMode === 'online' ? (
-                <button type="button" onClick={handlePayNow} disabled={loading}
-                  className="agua-btn agua-btn-primary disabled:opacity-60">
+                <button
+                  type="button"
+                  onClick={handlePayNow}
+                  disabled={loading}
+                  className="agua-btn agua-btn-primary disabled:opacity-60"
+                >
                   {loading ? 'Redirecting…' : 'Pay now'}
                 </button>
               ) : (
-                <button type="button" onClick={handleConfirmCOD} disabled={loading}
-                  className="agua-btn agua-btn-primary disabled:opacity-60">
+                <button
+                  type="button"
+                  onClick={handleConfirmCOD}
+                  disabled={loading}
+                  className="agua-btn agua-btn-primary disabled:opacity-60"
+                >
                   {loading ? 'Placing…' : 'Confirm order'}
                 </button>
               )}

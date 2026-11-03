@@ -24,9 +24,9 @@ export default function Sidebar({ onLogout }) {
 
   return (
     <aside className="flex h-screen w-[248px] min-w-[248px] flex-col bg-[#0f172a] text-white">
-      <div className="border-b border-white/10 px-5 py-5">
-        <BrandMark light size="sm" />
-        <p className="mt-1.5 pl-[3.15rem] text-[10px] font-medium uppercase tracking-[0.12em] text-slate-400">
+      <div className="border-b border-white/10 px-4 py-4">
+        <BrandMark light size="sm" className="!max-w-[168px]" />
+        <p className="mt-2 text-[10px] font-medium uppercase tracking-[0.12em] text-slate-400">
           Station Manager
         </p>
       </div>
