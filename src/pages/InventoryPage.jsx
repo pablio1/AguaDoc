@@ -1,14 +1,17 @@
 import { useMemo, useState } from 'react';
-import { Package, Plus, AlertTriangle, Box, Droplets, Wrench, History, ClipboardList } from 'lucide-react';
+import { Package, Plus, AlertTriangle, Box, Droplets, Wrench, ClipboardList } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import Modal from '../components/ui/Modal';
 import { showToast } from '../components/ui/Toast';
 import { apiRestockItem, apiUpdateInventory } from '../api';
 import PageHeader from '../components/admin/PageHeader';
+import SectionCard from '../components/admin/SectionCard';
+import EmptyState from '../components/admin/EmptyState';
+import { TABLE_BODY_ROW, TABLE_HEAD_ROW } from '../components/admin/tableStyles';
 
 const CATEGORY_META = {
   Containers: { icon: Box, iconBg: 'bg-sky-50 text-sky-600' },
-  'Water Refill': { icon: Droplets, iconBg: 'bg-cyan-50 text-cyan-600' },
+  'Water Refill': { icon: Droplets, iconBg: 'bg-blue-50 text-blue-600' },
   Accessories: { icon: Wrench, iconBg: 'bg-amber-50 text-amber-600' },
 };
 
@@ -146,8 +149,12 @@ export default function InventoryPage() {
       {/* Summary cards — clean white cards, category / name / qty / icon */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {stockItems.length === 0 ? (
-          <div className="agua-card col-span-full p-8 text-center text-sm text-muted">
-            No stock items yet. Run <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">npm run db:migrate</code> in <code className="text-xs">backend/</code> to seed inventory.
+          <div className="agua-card col-span-full">
+            <EmptyState
+              icon={Package}
+              title="No stock items yet"
+              description="Run npm run db:migrate in backend/ to seed the inventory catalog."
+            />
           </div>
         ) : (
           stockItems.map((item) => {
@@ -189,20 +196,15 @@ export default function InventoryPage() {
         )}
       </div>
 
-      {/* Stock Inventory Table */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_8px_24px_rgba(15,42,74,0.04)]">
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-          <div>
-            <h3 className="text-base font-bold text-ink">Stock Inventory Table</h3>
-            <p className="text-xs text-muted">Current counts, alert thresholds, and unit prices</p>
-          </div>
-          <Package size={18} className="text-slate-300" />
-        </div>
-
-        <div className="overflow-x-auto">
+      <SectionCard
+        title="Stock inventory"
+        description="Current counts, alert thresholds, and unit prices"
+        action={<Package size={18} className="text-slate-300" />}
+        bodyClassName="overflow-x-auto"
+      >
           <table className="w-full min-w-[780px] text-sm">
             <thead>
-              <tr className="border-b border-slate-100 bg-slate-50/70 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">
+              <tr className={TABLE_HEAD_ROW}>
                 <th className="px-5 py-3">Item Name</th>
                 <th className="px-3 py-3">Category</th>
                 <th className="px-3 py-3">Current Stock</th>
@@ -214,15 +216,15 @@ export default function InventoryPage() {
             <tbody>
               {stockItems.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-5 py-10 text-center text-sm text-muted">
-                    No stock rows to show.
+                  <td colSpan={6}>
+                    <EmptyState icon={Package} title="No stock rows" description="Seed inventory to populate this table." />
                   </td>
                 </tr>
               ) : (
                 stockItems.map((item) => {
                   const low = Number(item.stock) <= Number(item.minAlert);
                   return (
-                    <tr key={item.id} className="border-b border-slate-50 last:border-b-0 hover:bg-slate-50/50">
+                    <tr key={item.id} className={TABLE_BODY_ROW}>
                       <td className="px-5 py-3.5">
                         <p className="font-semibold text-ink">{item.name}</p>
                         {low && (
@@ -252,32 +254,21 @@ export default function InventoryPage() {
               )}
             </tbody>
           </table>
-        </div>
-      </div>
+      </SectionCard>
 
-      {/* Restock History & Logs */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_8px_24px_rgba(15,42,74,0.04)]">
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-          <div className="flex items-start gap-3">
-            <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
-              <History size={16} />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-ink">Restock History & Logs</h3>
-              <p className="text-xs text-muted">
-                Audit trail of stock additions — who restocked what, and by how much
-              </p>
-            </div>
-          </div>
+      <SectionCard
+        title="Restock history & logs"
+        description="Audit trail of stock additions — who restocked what, and by how much"
+        action={
           <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-500">
             {restockLogs.length} entries
           </span>
-        </div>
-
-        <div className="overflow-x-auto">
+        }
+        bodyClassName="overflow-x-auto"
+      >
           <table className="w-full min-w-[860px] text-sm">
             <thead>
-              <tr className="border-b border-slate-100 bg-slate-50/70 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">
+              <tr className={TABLE_HEAD_ROW}>
                 <th className="px-5 py-3">Date</th>
                 <th className="px-3 py-3">Item Name</th>
                 <th className="px-3 py-3">Category</th>
@@ -290,15 +281,17 @@ export default function InventoryPage() {
             <tbody>
               {restockLogs.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-5 py-12 text-center">
-                    <ClipboardList size={28} className="mx-auto text-slate-300" />
-                    <p className="mt-2 text-sm font-medium text-slate-500">No restock activity yet</p>
-                    <p className="mt-0.5 text-xs text-muted">Use Restock on any item to start the log.</p>
+                  <td colSpan={7}>
+                    <EmptyState
+                      icon={ClipboardList}
+                      title="No restock activity yet"
+                      description="Use Restock on any item to start the log."
+                    />
                   </td>
                 </tr>
               ) : (
                 restockLogs.map((log) => (
-                  <tr key={log.id} className="border-b border-slate-50 last:border-b-0 hover:bg-slate-50/50">
+                  <tr key={log.id} className={TABLE_BODY_ROW}>
                     <td className="whitespace-nowrap px-5 py-3.5 text-slate-600">
                       {formatDateTime(log.createdAt)}
                     </td>
@@ -323,11 +316,9 @@ export default function InventoryPage() {
               )}
             </tbody>
           </table>
-        </div>
-      </div>
+      </SectionCard>
 
-      {/* Station water tank — secondary to catalog UI */}
-      <div className="flex flex-col gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_8px_24px_rgba(15,42,74,0.04)] sm:flex-row sm:items-center sm:justify-between">
+      <div className="agua-card flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -375,9 +366,9 @@ export default function InventoryPage() {
 
           {stockItems.length > 1 && (
             <div className="mb-3">
-              <label className="mb-1 block text-xs font-semibold text-muted">Item</label>
+              <label className="agua-label">Item</label>
               <select
-                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                className="agua-input"
                 value={restockItem.id}
                 onChange={(e) => {
                   const next = stockItems.find((i) => i.id === e.target.value);
@@ -392,25 +383,25 @@ export default function InventoryPage() {
           )}
 
           <div className="mb-3">
-            <label className="mb-1 block text-xs font-semibold text-muted">Quantity to add</label>
+            <label className="agua-label">Quantity to add</label>
             <input
               type="number"
               min="1"
               value={restockQty}
               onChange={(e) => setRestockQty(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+              className="agua-input"
             />
           </div>
 
           <div className="mb-4">
-            <label className="mb-1 block text-xs font-semibold text-muted">Note (optional)</label>
+            <label className="agua-label">Note (optional)</label>
             <input
               type="text"
               maxLength={500}
               placeholder="e.g. Weekly supplier delivery"
               value={restockNote}
               onChange={(e) => setRestockNote(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+              className="agua-input"
             />
           </div>
 
@@ -438,23 +429,23 @@ export default function InventoryPage() {
       {showTankModal && (
         <Modal title="Adjust Water Tank" onClose={() => setShowTankModal(false)}>
           <div className="mb-3">
-            <label className="mb-1 block text-xs font-semibold text-muted">Current level (L)</label>
+            <label className="agua-label">Current level (L)</label>
             <input
               type="number"
               min="0"
               value={tankForm.waterLevel}
               onChange={(e) => setTankForm({ ...tankForm, waterLevel: e.target.value })}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+              className="agua-input"
             />
           </div>
           <div className="mb-4">
-            <label className="mb-1 block text-xs font-semibold text-muted">Max capacity (L)</label>
+            <label className="agua-label">Max capacity (L)</label>
             <input
               type="number"
               min="1"
               value={tankForm.maxCapacity}
               onChange={(e) => setTankForm({ ...tankForm, maxCapacity: e.target.value })}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+              className="agua-input"
             />
           </div>
           <div className="flex justify-end gap-2">

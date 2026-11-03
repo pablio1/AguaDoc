@@ -7,6 +7,8 @@ import PageHeader from '../components/admin/PageHeader';
 import SectionCard from '../components/admin/SectionCard';
 import FilterPills from '../components/admin/FilterPills';
 import { TABLE_BODY_ROW, TABLE_HEAD_ROW } from '../components/admin/tableStyles';
+import EmptyState from '../components/admin/EmptyState';
+import { FileSpreadsheet } from 'lucide-react';
 
 export default function ReportsPage() {
   const { state } = useApp();
@@ -113,9 +115,16 @@ export default function ReportsPage() {
 
   // ── Payment method badge ──
   const methodBadge = {
-    Cash:   'bg-indigo-100 text-indigo-800',
-    GCash:  'bg-green-100 text-green-800',
-    Online: 'bg-blue-100 text-blue-800',
+    Cash: 'bg-slate-100 text-slate-700',
+    GCash: 'bg-emerald-50 text-emerald-700',
+    Online: 'bg-blue-50 text-blue-700',
+    Xendit: 'bg-sky-50 text-sky-700',
+  };
+
+  const statusPill = (status) => {
+    if (status === 'Delivered' || status === 'Ready to Go') return 'bg-emerald-50 text-emerald-700';
+    if (status === 'Cancelled') return 'bg-red-50 text-red-700';
+    return 'bg-amber-50 text-amber-800';
   };
 
   return (
@@ -181,6 +190,17 @@ export default function ReportsPage() {
             </tr>
           </thead>
           <tbody>
+            {state.orders.length === 0 ? (
+              <tr>
+                <td colSpan={7}>
+                  <EmptyState
+                    icon={FileSpreadsheet}
+                    title="No transactions yet"
+                    description="Orders will appear here for export and review once they are created."
+                  />
+                </td>
+              </tr>
+            ) : null}
             {state.orders.map((o) => {
               const id  = o.userId || o.custId;
               const customer =
@@ -199,15 +219,14 @@ export default function ReportsPage() {
                   <td className="px-3 py-3.5 text-muted">{o.quantity ?? o.gallons ?? '—'}</td>
                   <td className="px-3 py-3.5 font-bold text-ink">₱{o.total ?? o.amount ?? '—'}</td>
                   <td className="px-3 py-3.5">
-                    <span className={`inline-flex px-2 py-0.5 rounded-full text-[11.5px] font-semibold
-                      ${pay ? (methodBadge[pay.method] ?? 'bg-gray-100 text-gray-600') : 'bg-yellow-100 text-yellow-800'}`}>
+                    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold
+                      ${pay ? (methodBadge[pay.method] ?? 'bg-slate-100 text-slate-600') : 'bg-amber-50 text-amber-800'}`}>
                       {pay ? pay.method : 'Unpaid'}
                     </span>
                   </td>
                   <td className="px-3 py-3.5 text-muted">{displayDate}</td>
                   <td className="px-3 py-3.5">
-                    <span className={`inline-flex px-2 py-0.5 rounded-full text-[11.5px] font-semibold
-                      ${o.status === 'Delivered' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${statusPill(o.status)}`}>
                       {o.status}
                     </span>
                   </td>

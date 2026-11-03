@@ -94,8 +94,8 @@ export default function LandingPage({ onLogin, onRegister }) {
             backgroundSize: '32px 32px',
           }}
         />
-        <div className="pointer-events-none absolute -right-20 top-24 h-[28rem] w-[28rem] rounded-full bg-cyan-400/20 blur-3xl agua-float" />
-        <div className="pointer-events-none absolute -left-16 bottom-10 h-80 w-80 rounded-full bg-teal-500/15 blur-3xl" />
+        <div className="pointer-events-none absolute -right-20 top-24 h-[28rem] w-[28rem] rounded-full bg-blue-500/20 blur-3xl agua-float" />
+        <div className="pointer-events-none absolute -left-16 bottom-10 h-80 w-80 rounded-full bg-slate-400/10 blur-3xl" />
 
         <div className="relative mx-auto flex min-h-dvh max-w-6xl flex-col justify-center px-5 pb-20 pt-28 sm:px-8">
           <div className="agua-fade-up max-w-2xl">
@@ -126,7 +126,7 @@ export default function LandingPage({ onLogin, onRegister }) {
           {/* Dominant visual plane — abstract water route, not a card collage */}
           <div className="agua-fade-up-delay pointer-events-none absolute inset-y-0 right-0 hidden w-[48%] lg:block">
             <div className="absolute inset-8 overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 shadow-2xl backdrop-blur-sm">
-              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(34,211,238,0.25),transparent_55%)]" />
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(59,130,246,0.22),transparent_55%)]" />
               <svg className="absolute inset-0 h-full w-full opacity-80" viewBox="0 0 400 560" fill="none" aria-hidden>
                 <path
                   d="M60 480 C120 400, 90 320, 160 280 S280 220, 250 140 S180 60, 320 40"
@@ -136,23 +136,23 @@ export default function LandingPage({ onLogin, onRegister }) {
                   strokeDasharray="8 10"
                   className="agua-dash"
                 />
-                <circle cx="60" cy="480" r="10" fill="#22d3ee" />
+                <circle cx="60" cy="480" r="10" fill="#60a5fa" />
                 <circle cx="250" cy="140" r="8" fill="#fff" fillOpacity="0.9" />
-                <circle cx="320" cy="40" r="14" fill="#12b8c9" />
+                <circle cx="320" cy="40" r="14" fill="#3b82f6" />
                 <defs>
                   <linearGradient id="route" x1="60" y1="480" x2="320" y2="40">
-                    <stop stopColor="#22d3ee" />
+                    <stop stopColor="#60a5fa" />
                     <stop offset="1" stopColor="#ffffff" stopOpacity="0.5" />
                   </linearGradient>
                 </defs>
               </svg>
               <div className="absolute bottom-8 left-8 right-8 flex items-end justify-between">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200/70">Live route</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-200/70">Live route</p>
                   <p className="mt-1 font-display text-xl font-bold text-white">Station → your door</p>
                 </div>
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 to-teal-600 text-xl shadow-lg shadow-cyan-500/40">
-                  🛵
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-500 text-white shadow-lg shadow-blue-500/40">
+                  <Bike size={22} />
                 </div>
               </div>
             </div>
@@ -174,7 +174,7 @@ export default function LandingPage({ onLogin, onRegister }) {
           <div className="mt-12 grid gap-8 md:grid-cols-3">
             {STEPS.map((step) => (
               <div key={step.n} className="relative">
-                <p className="font-display text-4xl font-extrabold text-cyan-200/80">{step.n}</p>
+                <p className="font-display text-4xl font-extrabold text-blue-200/90">{step.n}</p>
                 <h3 className="mt-3 font-display text-xl font-bold text-ink">{step.title}</h3>
                 <p className="mt-2 text-sm leading-relaxed text-muted">{step.copy}</p>
               </div>
@@ -193,7 +193,7 @@ export default function LandingPage({ onLogin, onRegister }) {
           <div className="mt-12 grid gap-6 sm:grid-cols-2">
             {SERVICES.map(({ icon: Icon, title, copy }) => (
               <div key={title} className="flex gap-4 rounded-2xl border border-slate-100 bg-foam/50 p-5">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 to-teal-600 text-white shadow-md shadow-cyan-500/25">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-500 text-white shadow-md shadow-blue-500/25">
                   <Icon size={18} />
                 </div>
                 <div>
@@ -210,7 +210,7 @@ export default function LandingPage({ onLogin, onRegister }) {
       <section className="agua-dark-mesh px-5 py-20 text-white sm:px-8">
         <div className="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-2">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200/70">Coverage</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-200/70">Coverage</p>
             <h2 className="mt-2 font-display text-3xl font-bold tracking-tight sm:text-4xl">
               Serving Lapu-Lapu City households & shops.
             </h2>
@@ -218,13 +218,15 @@ export default function LandingPage({ onLogin, onRegister }) {
               From Basak to Calawisan and nearby barangays — pin your location so riders find you faster.
             </p>
             <ul className="mt-8 space-y-3 text-sm text-white/70">
-              <li className="flex items-center gap-2"><ShieldCheck size={16} className="text-cyan-300" /> Secure online checkout</li>
-              <li className="flex items-center gap-2"><Bike size={16} className="text-cyan-300" /> Assigned delivery riders</li>
-              <li className="flex items-center gap-2"><MapPinned size={16} className="text-cyan-300" /> Map-pin drop-offs</li>
+              <li className="flex items-center gap-2"><ShieldCheck size={16} className="text-blue-300" /> Secure online checkout</li>
+              <li className="flex items-center gap-2"><Bike size={16} className="text-blue-300" /> Assigned delivery riders</li>
+              <li className="flex items-center gap-2"><MapPinned size={16} className="text-blue-300" /> Map-pin drop-offs</li>
             </ul>
           </div>
           <div className="relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/5 p-8 backdrop-blur-sm">
-            <p className="font-display text-5xl font-extrabold text-cyan-200">💧</p>
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-500/20 text-blue-300 ring-1 ring-white/10">
+              <Droplets size={28} />
+            </div>
             <p className="mt-4 font-display text-2xl font-bold leading-snug">
               Order today.<br />Track every stop.
             </p>

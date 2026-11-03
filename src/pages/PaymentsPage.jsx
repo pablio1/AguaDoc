@@ -7,6 +7,8 @@ import { apiAddPayment, apiUpdateCustomer } from '../api';
 import PageHeader from '../components/admin/PageHeader';
 import SectionCard from '../components/admin/SectionCard';
 import { TABLE_BODY_ROW, TABLE_HEAD_ROW } from '../components/admin/tableStyles';
+import EmptyState from '../components/admin/EmptyState';
+import { CreditCard, Wallet } from 'lucide-react';
 
 export default function PaymentsPage() {
   const { state, dispatch } = useApp();
@@ -100,7 +102,11 @@ const debtorCount    = state.customers.filter(c => parseFloat(c.balance) > 0).le
           bodyClassName="max-h-[400px] overflow-auto"
         >
           {unpaidCustomers.length === 0 ? (
-            <p className="px-5 py-10 text-center text-sm text-muted">No outstanding balances.</p>
+            <EmptyState
+              icon={Wallet}
+              title="No outstanding balances"
+              description="All walk-in accounts are cleared. New debt appears when credit orders are recorded."
+            />
           ) : (
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10 bg-white">
@@ -141,8 +147,12 @@ const debtorCount    = state.customers.filter(c => parseFloat(c.balance) > 0).le
             <tbody>
               {paymentHistory.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-5 py-10 text-center text-sm text-muted">
-                    No settlements yet — record a payment to start the history.
+                  <td colSpan={5}>
+                    <EmptyState
+                      icon={CreditCard}
+                      title="No settlements yet"
+                      description="Record a payment to start the settlement history."
+                    />
                   </td>
                 </tr>
               ) : (
@@ -179,7 +189,7 @@ const debtorCount    = state.customers.filter(c => parseFloat(c.balance) > 0).le
       {showModal && (
         <Modal title="Record new payment" onClose={() => setShowModal(false)}>
           <div className="mb-3">
-            <label className="block text-[12.5px] font-semibold mb-1">Select Customer</label>
+            <label className="agua-label">Select customer</label>
             <select
               className="agua-input"
               value={form.custId}
@@ -193,7 +203,7 @@ const debtorCount    = state.customers.filter(c => parseFloat(c.balance) > 0).le
           </div>
           <div className="grid grid-cols-2 gap-2.5 mb-3">
             <div>
-              <label className="block text-[12.5px] font-semibold mb-1">Payment Method</label>
+              <label className="agua-label">Payment method</label>
               <select
                 className="agua-input"
                 value={form.method}
@@ -205,7 +215,7 @@ const debtorCount    = state.customers.filter(c => parseFloat(c.balance) > 0).le
               </select>
             </div>
             <div>
-              <label className="block text-[12.5px] font-semibold mb-1">Amount Paid (₱)</label>
+              <label className="agua-label">Amount paid (₱)</label>
               <input
                 type="number" min="1" placeholder="0"
                 className="agua-input"

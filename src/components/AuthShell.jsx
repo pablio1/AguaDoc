@@ -4,8 +4,8 @@ export default function AuthShell({ children, title, subtitle }) {
   return (
     <div className="agua-mesh relative min-h-dvh overflow-hidden">
       {/* Soft atmospheric shapes */}
-      <div className="pointer-events-none absolute -left-24 top-16 h-72 w-72 rounded-full bg-cyan-300/25 blur-3xl agua-float" />
-      <div className="pointer-events-none absolute -right-16 bottom-10 h-80 w-80 rounded-full bg-teal-400/15 blur-3xl" />
+      <div className="pointer-events-none absolute -left-24 top-16 h-72 w-72 rounded-full bg-blue-400/20 blur-3xl agua-float" />
+      <div className="pointer-events-none absolute -right-16 bottom-10 h-80 w-80 rounded-full bg-slate-300/25 blur-3xl" />
 
       <div className="relative mx-auto grid min-h-dvh max-w-6xl lg:grid-cols-[1.05fr_0.95fr]">
         {/* Brand stage */}
@@ -30,15 +30,15 @@ export default function AuthShell({ children, title, subtitle }) {
 
               <div className="agua-fade-up-delay flex gap-6 text-xs text-white/50">
                 <div>
-                  <p className="font-display text-2xl font-bold text-cyan-200">Live</p>
+                  <p className="font-display text-2xl font-bold text-blue-300">Live</p>
                   <p>Rider tracking</p>
                 </div>
                 <div>
-                  <p className="font-display text-2xl font-bold text-cyan-200">Fast</p>
+                  <p className="font-display text-2xl font-bold text-blue-300">Fast</p>
                   <p>Same-day delivery</p>
                 </div>
                 <div>
-                  <p className="font-display text-2xl font-bold text-cyan-200">Secure</p>
+                  <p className="font-display text-2xl font-bold text-blue-300">Secure</p>
                   <p>GCash / Maya</p>
                 </div>
               </div>

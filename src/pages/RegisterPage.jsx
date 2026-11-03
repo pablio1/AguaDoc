@@ -8,7 +8,7 @@ function Field({ label, icon: Icon, children }) {
   return (
     <div>
       <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">{label}</label>
-      <div className="flex items-center gap-2 rounded-[0.9rem] border border-slate-200/80 bg-white px-3 py-2.5 focus-within:border-accent focus-within:ring-4 focus-within:ring-cyan-500/15">
+      <div className="flex items-center gap-2 rounded-[0.9rem] border border-slate-200/80 bg-white px-3 py-2.5 focus-within:border-accent focus-within:ring-4 focus-within:ring-blue-500/15">
         <Icon size={16} className="shrink-0 text-slate-400" />
         {children}
       </div>
@@ -133,7 +133,7 @@ export default function RegisterPage({ onGoLogin, onLogin, onGoLanding }) {
               checked={agreed}
               disabled={!readTerms}
               onChange={(e) => setAgreed(e.target.checked)}
-              className="mt-0.5 accent-[#12b8c9]"
+              className="mt-0.5 accent-[#3b82f6]"
             />
             <span>
               I have read and agree to the{' '}

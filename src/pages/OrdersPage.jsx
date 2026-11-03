@@ -8,6 +8,8 @@ import PageHeader from '../components/admin/PageHeader';
 import SectionCard from '../components/admin/SectionCard';
 import FilterPills from '../components/admin/FilterPills';
 import { TABLE_BODY_ROW, TABLE_HEAD_ROW } from '../components/admin/tableStyles';
+import EmptyState from '../components/admin/EmptyState';
+import { ClipboardList, MapPin, Trash2 } from 'lucide-react';
 
 const PRICE = 40;
 
@@ -166,21 +168,25 @@ export default function OrdersPage() {
   const unassignedCount = (state.orders || []).filter(o => canAssignRider(o) && !o.riderId).length;
 
   const statusBadge = {
-    'Delivered':          'bg-green-100 text-green-800',
-    'Ready to Go':        'bg-green-100 text-green-700',
-    'Assigned':           'bg-indigo-100 text-indigo-800',
-    'Accepted':           'bg-sky-100 text-sky-800',
-    'Out for Delivery':   'bg-emerald-100 text-emerald-800',
-    'Processing':         'bg-blue-100 text-blue-800',
-    'Cancelled':          'bg-red-100 text-red-800',
-    'Pending':            'bg-yellow-100 text-yellow-800',
+    Delivered: 'bg-emerald-50 text-emerald-700',
+    'Ready to Go': 'bg-emerald-50 text-emerald-700',
+    Assigned: 'bg-blue-50 text-blue-700',
+    Accepted: 'bg-sky-50 text-sky-700',
+    'Out for Delivery': 'bg-blue-50 text-blue-700',
+    Processing: 'bg-sky-50 text-sky-800',
+    Cancelled: 'bg-red-50 text-red-700',
+    Pending: 'bg-amber-50 text-amber-800',
   };
 
   const typeBadge = {
-    'Delivery':        'bg-blue-100 text-blue-800',
-    'Walk-in / Pickup':'bg-green-50 text-green-700',
-    'Walk-in':         'bg-green-50 text-green-700',
+    Delivery: 'bg-blue-50 text-blue-700',
+    'Walk-in / Pickup': 'bg-slate-100 text-slate-600',
+    'Walk-in': 'bg-slate-100 text-slate-600',
   };
+
+  const orderCount = (state.orders || []).length;
+  const pendingCount = (state.orders || []).filter((o) => o.status === 'Pending').length;
+  const deliveredCount = (state.orders || []).filter((o) => o.status === 'Delivered').length;
 
   const tabs = ['All', 'Unassigned', 'Pending', 'Assigned', 'Out for Delivery', 'Processing', 'Delivered', 'Cancelled', 'Delivery', 'Walk-in'];
 
@@ -216,6 +222,21 @@ export default function OrdersPage() {
         </button>
       </PageHeader>
 
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="agua-card px-5 py-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">All orders</p>
+          <p className="mt-2 font-display text-2xl font-bold text-ink">{orderCount}</p>
+        </div>
+        <div className="agua-card px-5 py-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">Pending</p>
+          <p className="mt-2 font-display text-2xl font-bold text-amber-700">{pendingCount}</p>
+        </div>
+        <div className="agua-card px-5 py-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">Delivered</p>
+          <p className="mt-2 font-display text-2xl font-bold text-emerald-600">{deliveredCount}</p>
+        </div>
+      </div>
+
       <FilterPills options={tabs} value={filter} onChange={setFilter} className="!mb-0" />
 
       <SectionCard title="Orders" description={`${filtered.length} shown · filter: ${filter}`} bodyClassName="max-h-[540px] overflow-auto">
@@ -234,8 +255,12 @@ export default function OrdersPage() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-5 py-10 text-center text-sm text-muted">
-                  No orders match this filter.
+                <td colSpan={10}>
+                  <EmptyState
+                    icon={ClipboardList}
+                    title="No orders match this filter"
+                    description="Try another status tab or create a new order."
+                  />
                 </td>
               </tr>
             ) : (
@@ -246,7 +271,7 @@ export default function OrdersPage() {
                   </td>
                   <td className="px-3 py-3.5 font-semibold text-ink">{getCustomerName(o)}</td>
                   <td className="px-3 py-3.5">
-                    <span className={`inline-flex px-2 py-0.5 rounded-full text-[11.5px] font-semibold ${typeBadge[o.type] || 'bg-gray-100 text-gray-500'}`}>
+                    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${typeBadge[o.type] || 'bg-slate-100 text-slate-600'}`}>
                       {o.type}
                     </span>
                   </td>
@@ -254,19 +279,19 @@ export default function OrdersPage() {
                   <td className="px-3 py-3.5 font-bold text-ink">₱{o.total ?? o.amount ?? '—'}</td>
                   <td className="px-3 py-3.5">
                     {o.paymentStatus === 'paid' ? (
-                      <span className="inline-flex px-2 py-0.5 rounded-full text-[11.5px] font-semibold bg-green-100 text-green-800">
-                        ✔ Paid (Xendit)
+                      <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
+                        Paid (Xendit)
                       </span>
                     ) : o.checkoutSessionId ? (
-                      <span className="inline-flex px-2 py-0.5 rounded-full text-[11.5px] font-semibold bg-yellow-100 text-yellow-800">
-                        ⏳ Awaiting payment
+                      <span className="inline-flex rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800">
+                        Awaiting payment
                       </span>
                     ) : o.payMethod === 'Cash on Delivery' ? (
-                      <span className="inline-flex px-2 py-0.5 rounded-full text-[11.5px] font-semibold bg-orange-100 text-orange-800">
-                        💵 Cash on Delivery
+                      <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700">
+                        Cash on delivery
                       </span>
                     ) : (
-                      <span className="inline-flex px-2 py-0.5 rounded-full text-[11.5px] font-semibold bg-gray-100 text-gray-500">
+                      <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600">
                         Pay on arrival
                       </span>
                     )}
@@ -291,7 +316,7 @@ export default function OrdersPage() {
                     ) : isDeliveryOrder(o) ? (
                       <span className="text-[11.5px] text-amber-600 font-semibold">Unassigned</span>
                     ) : (
-                      <span className="text-gray-300">—</span>
+                      <span className="text-slate-300">—</span>
                     )}
                   </td>
                   <td className="whitespace-nowrap px-3 py-3.5 text-muted">
@@ -317,7 +342,7 @@ export default function OrdersPage() {
                         <button
                           type="button"
                           onClick={() => handleMarkProcessing(o)}
-                          className="bg-blue-500 text-white text-[11px] font-semibold px-2 py-1 rounded cursor-pointer hover:bg-blue-600"
+                          className="cursor-pointer rounded-lg bg-blue-600 px-2.5 py-1 text-[11px] font-semibold text-white transition hover:bg-blue-700"
                         >
                           Process
                         </button>
@@ -326,7 +351,7 @@ export default function OrdersPage() {
                         <button
                           type="button"
                           onClick={() => handleMarkDone(o)}
-                          className="bg-green-600 text-white text-[11px] font-semibold px-2 py-1 rounded cursor-pointer hover:bg-green-700"
+                          className="cursor-pointer rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white transition hover:bg-emerald-700"
                         >
                           Done
                         </button>
@@ -335,9 +360,10 @@ export default function OrdersPage() {
                         <button
                           type="button"
                           onClick={() => handleDeleteOrder(o)}
-                          className="border border-gray-200 rounded w-7 h-7 flex items-center justify-center text-[13px] hover:bg-gray-50 cursor-pointer"
+                          className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                          aria-label="Cancel order"
                         >
-                          🗑
+                          <Trash2 size={14} />
                         </button>
                       )}
                     </div>
@@ -351,15 +377,15 @@ export default function OrdersPage() {
 
       {/* ── New Order Modal ── */}
       {showOrderModal && (
-        <Modal title="📋 Create New Order" onClose={() => setShowOrderModal(false)}>
+        <Modal title="Create new order" onClose={() => setShowOrderModal(false)}>
           <div className="mb-3">
-            <label className="block text-[12.5px] font-semibold mb-1">Select Customer</label>
+            <label className="agua-label">Select customer</label>
             <select
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] outline-none focus:border-accent"
+              className="agua-input"
               value={form.custId}
               onChange={e => setForm({ ...form, custId: e.target.value })}
             >
-              <option value="">-- Select Customer --</option>
+              <option value="">— Select customer —</option>
               {(state.customers || []).map(c => (
                 <option key={c.id} value={c.id}>
                   {c.fullName || c.username || c.name}
@@ -367,11 +393,11 @@ export default function OrdersPage() {
               ))}
             </select>
           </div>
-          <div className="grid grid-cols-2 gap-2.5 mb-3">
+          <div className="mb-3 grid grid-cols-2 gap-2.5">
             <div>
-              <label className="block text-[12.5px] font-semibold mb-1">Order Type</label>
+              <label className="agua-label">Order type</label>
               <select
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] outline-none focus:border-accent"
+                className="agua-input"
                 value={form.type}
                 onChange={e => setForm({ ...form, type: e.target.value })}
               >
@@ -380,34 +406,39 @@ export default function OrdersPage() {
               </select>
             </div>
             <div>
-              <label className="block text-[12.5px] font-semibold mb-1">Gallons</label>
+              <label className="agua-label">Gallons</label>
               <input
-                type="number" min="1"
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] outline-none focus:border-accent"
+                type="number"
+                min="1"
+                className="agua-input"
                 value={form.gallons}
                 onChange={e => setForm({ ...form, gallons: e.target.value })}
               />
             </div>
           </div>
           <div className="mb-3">
-            <label className="block text-[12.5px] font-semibold mb-1">Scheduled Date</label>
+            <label className="agua-label">Scheduled date</label>
             <input
               type="date"
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] outline-none focus:border-accent"
+              className="agua-input"
               value={form.date}
               onChange={e => setForm({ ...form, date: e.target.value })}
             />
           </div>
-          <div className="bg-teal-50 border border-teal-200 rounded-lg px-3.5 py-2.5 flex justify-between font-bold text-[14px] my-2">
-            <span>Total Amount:</span>
+          <div className="my-2 flex justify-between rounded-xl border border-blue-100 bg-blue-50/80 px-3.5 py-2.5 text-sm font-bold text-ink">
+            <span className="text-muted">Total amount</span>
             <span>₱{form.gallons * PRICE}</span>
           </div>
-          <div className="flex gap-2 justify-end mt-4">
-            <button onClick={() => setShowOrderModal(false)} className="px-4 py-2 border border-gray-200 rounded-lg text-[12.5px] font-semibold hover:bg-gray-50 cursor-pointer">
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setShowOrderModal(false)}
+              className="rounded-xl border border-slate-200 px-4 py-2 text-[12.5px] font-semibold text-ink hover:bg-slate-50"
+            >
               Cancel
             </button>
-            <button onClick={handlePlaceOrder} className="px-4 py-2 bg-accent text-white rounded-lg text-[12.5px] font-semibold hover:bg-accent2 cursor-pointer">
-              🚀 Place Order
+            <button type="button" onClick={handlePlaceOrder} className="agua-btn agua-btn-primary !py-2">
+              Place order
             </button>
           </div>
         </Modal>
@@ -415,37 +446,51 @@ export default function OrdersPage() {
 
       {/* ── Smart Route Modal ── */}
       {showRouteModal && (
-        <Modal title="🚗 Smart Delivery Routing" onClose={() => setShowRouteModal(false)}>
-          <p className="text-[13px] text-gray-500 mb-3">
-            Optimized route for today's pending deliveries based on location proximity.
+        <Modal title="Smart delivery routing" onClose={() => setShowRouteModal(false)}>
+          <p className="mb-3 text-[13px] text-muted">
+            Optimized route for today&apos;s pending deliveries based on location proximity.
           </p>
           {pendingDeliveries.length === 0 ? (
-            <div className="text-center text-gray-400 text-xs py-4">No pending deliveries today.</div>
+            <EmptyState
+              icon={MapPin}
+              title="No pending deliveries"
+              description="Delivery stops appear here when orders are pending with an address."
+            />
           ) : (
             pendingDeliveries.map((o, i) => (
-              <div key={o.id} className="flex items-center gap-2.5 bg-gray-50 rounded-lg px-3 py-2.5 mb-2">
-                <div className="w-6 h-6 rounded-full bg-accent text-white flex items-center justify-center text-xs font-bold shrink-0">
+              <div key={o.id} className="mb-2 flex items-center gap-2.5 rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-500 text-xs font-bold text-white">
                   {i + 1}
                 </div>
-                <div>
-                  <div className="text-[13.5px] font-semibold">{getCustomerName(o)} ({o.quantity ?? o.gallons} gal)</div>
-                  <div className="text-xs text-gray-500">📍 {o.address || 'N/A'}</div>
+                <div className="min-w-0">
+                  <div className="text-[13px] font-semibold text-ink">
+                    {getCustomerName(o)} ({o.quantity ?? o.gallons} gal)
+                  </div>
+                  <div className="flex items-center gap-1 text-xs text-muted">
+                    <MapPin size={11} className="shrink-0" />
+                    <span className="truncate">{o.address || 'N/A'}</span>
+                  </div>
                 </div>
               </div>
             ))
           )}
-          <div className="bg-teal-50 border border-teal-200 rounded-lg px-3 py-2.5 text-[13px] mt-3">
-            <strong>Stops:</strong> {pendingDeliveries.length}
+          <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50/80 px-3 py-2.5 text-[13px] text-ink">
+            <span className="font-semibold">Stops:</span> {pendingDeliveries.length}
           </div>
-          <div className="flex gap-2 justify-end mt-4">
-            <button onClick={() => setShowRouteModal(false)} className="px-4 py-2 border border-gray-200 rounded-lg text-[12.5px] font-semibold hover:bg-gray-50 cursor-pointer">
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setShowRouteModal(false)}
+              className="rounded-xl border border-slate-200 px-4 py-2 text-[12.5px] font-semibold text-ink hover:bg-slate-50"
+            >
               Close
             </button>
             <button
-              onClick={() => { showToast('📤 Route sent to driver!'); setShowRouteModal(false); }}
-              className="px-4 py-2 bg-accent text-white rounded-lg text-[12.5px] font-semibold hover:bg-accent2 cursor-pointer"
+              type="button"
+              onClick={() => { showToast('Route sent to driver'); setShowRouteModal(false); }}
+              className="agua-btn agua-btn-primary !py-2"
             >
-              📤 Send to Driver
+              Send to driver
             </button>
           </div>
         </Modal>
@@ -453,21 +498,25 @@ export default function OrdersPage() {
 
       {/* ── Assign Rider Modal ── */}
       {assignOrder && (
-        <Modal title="🛵 Assign Rider" onClose={() => { setAssignOrder(null); setSelectedRiderId(''); }}>
-          <p className="text-[13px] text-gray-500 mb-3">
-            Assign a rider to deliver <span className="font-semibold text-gray-700">{assignOrder.ref || assignOrder.id}</span>
-            {' '}for <span className="font-semibold text-gray-700">{getCustomerName(assignOrder)}</span>.
+        <Modal title="Assign rider" onClose={() => { setAssignOrder(null); setSelectedRiderId(''); }}>
+          <p className="mb-3 text-[13px] text-muted">
+            Assign a rider to deliver{' '}
+            <span className="font-semibold text-ink">{assignOrder.ref || assignOrder.id}</span>
+            {' '}for <span className="font-semibold text-ink">{getCustomerName(assignOrder)}</span>.
           </p>
           {assignOrder.address && (
-            <p className="text-xs text-gray-400 mb-3">📍 {assignOrder.address}</p>
+            <p className="mb-3 flex items-start gap-1 text-xs text-muted">
+              <MapPin size={12} className="mt-0.5 shrink-0" />
+              <span>{assignOrder.address}</span>
+            </p>
           )}
-          <label className="block text-[12.5px] font-semibold mb-1">Select Rider</label>
+          <label className="agua-label">Select rider</label>
           <select
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] outline-none focus:border-accent mb-3"
+            className="agua-input mb-3"
             value={selectedRiderId}
             onChange={e => setSelectedRiderId(e.target.value)}
           >
-            <option value="">-- Choose rider --</option>
+            <option value="">— Choose rider —</option>
             {riders.map(r => (
               <option key={r.id} value={r.id}>
                 {r.fullName || r.username} ({r.phone || r.email || 'no contact'})
@@ -475,23 +524,25 @@ export default function OrdersPage() {
             ))}
           </select>
           {riders.length === 0 && (
-            <p className="text-xs text-amber-600 mb-3">
+            <p className="mb-3 text-xs text-amber-700">
               No rider accounts found. Create a user with role <strong>rider</strong> first (seed: rider / rider123).
             </p>
           )}
-          <div className="flex gap-2 justify-end mt-2">
+          <div className="mt-2 flex justify-end gap-2">
             <button
+              type="button"
               onClick={() => { setAssignOrder(null); setSelectedRiderId(''); }}
-              className="px-4 py-2 border border-gray-200 rounded-lg text-[12.5px] font-semibold hover:bg-gray-50 cursor-pointer"
+              className="rounded-xl border border-slate-200 px-4 py-2 text-[12.5px] font-semibold text-ink hover:bg-slate-50"
             >
               Cancel
             </button>
             <button
+              type="button"
               onClick={handleAssignRider}
               disabled={assigning || !selectedRiderId}
-              className="px-4 py-2 bg-indigo-500 text-white rounded-lg text-[12.5px] font-semibold hover:bg-indigo-600 cursor-pointer disabled:opacity-50"
+              className="agua-btn agua-btn-primary !py-2 disabled:opacity-50"
             >
-              {assigning ? 'Assigning…' : 'Confirm Assign'}
+              {assigning ? 'Assigning…' : 'Confirm assign'}
             </button>
           </div>
         </Modal>

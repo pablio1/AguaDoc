@@ -5,6 +5,8 @@ import { Chart } from 'chart.js/auto';
 import PageHeader from '../components/admin/PageHeader';
 import SectionCard from '../components/admin/SectionCard';
 import { TABLE_BODY_ROW, TABLE_HEAD_ROW } from '../components/admin/tableStyles';
+import EmptyState from '../components/admin/EmptyState';
+import { Users } from 'lucide-react';
 
 const HISTORY_DAYS = 14; // how many past days feed the trend line
 const FORECAST_DAYS = 7; // how many days ahead we project
@@ -82,7 +84,7 @@ export default function PredictionsPage() {
     const risk     = score > 70 ? 'High' : score > 40 ? 'Medium' : 'Low';
     const barColor = score > 70 ? '#e53e3e' : score > 40 ? '#f59e0b' : '#38a169';
     const bgColor  = score > 70 ? '#fee2e2' : score > 40 ? '#fef3c7' : '#d1fae5';
-    const badgeStyle = score > 70 ? 'bg-red-100 text-red-800' : score > 40 ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800';
+    const badgeStyle = score > 70 ? 'bg-red-50 text-red-700' : score > 40 ? 'bg-amber-50 text-amber-800' : 'bg-emerald-50 text-emerald-700';
     return { ...c, score, risk, barColor, bgColor, badgeStyle };
   });
 
@@ -135,21 +137,21 @@ export default function PredictionsPage() {
         subtitle={`Forecasts from the last ${HISTORY_DAYS} days of delivered orders (moving average + trend line).`}
       />
 
-      <SectionCard title="Sales forecast" description="Actual history vs. projected trend" bodyClassName="px-5 pb-5 pt-2">
-        <div className="mb-4 grid gap-3 sm:grid-cols-3">
-          {[
-            { label: 'Predicted today', value: `₱${predToday}`, note: 'Average of last 7 actual days' },
-            { label: 'Predicted this week', value: `₱${predWeek}`, note: 'Trend line projected 7 days ahead' },
-            { label: 'Predicted this month', value: `₱${predMonth}`, note: 'Weekly forecast scaled to 30 days' },
-          ].map((p) => (
-            <div key={p.label} className="rounded-xl border border-slate-100 bg-slate-50/60 px-4 py-3.5">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">{p.label}</p>
-              <p className="mt-1 font-display text-xl font-bold text-ink">{p.value}</p>
-              <p className="mt-0.5 text-xs text-muted">{p.note}</p>
-            </div>
-          ))}
-        </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        {[
+          { label: 'Predicted today', value: `₱${predToday}`, note: 'Average of last 7 actual days' },
+          { label: 'Predicted this week', value: `₱${predWeek}`, note: 'Trend line projected 7 days ahead' },
+          { label: 'Predicted this month', value: `₱${predMonth}`, note: 'Weekly forecast scaled to 30 days' },
+        ].map((p) => (
+          <div key={p.label} className="agua-card px-5 py-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">{p.label}</p>
+            <p className="mt-2 font-display text-2xl font-bold text-ink">{p.value}</p>
+            <p className="mt-1 text-xs text-muted">{p.note}</p>
+          </div>
+        ))}
+      </div>
 
+      <SectionCard title="Sales forecast" description="Actual history vs. projected trend" bodyClassName="px-5 pb-5 pt-2">
         <div className="relative h-[200px]">
           <canvas ref={canvasRef} />
         </div>
@@ -177,6 +179,17 @@ export default function PredictionsPage() {
             </tr>
           </thead>
           <tbody>
+            {riskData.length === 0 ? (
+              <tr>
+                <td colSpan={4}>
+                  <EmptyState
+                    icon={Users}
+                    title="No walk-in customers"
+                    description="Debt risk scores appear when walk-in accounts exist in Debt Management."
+                  />
+                </td>
+              </tr>
+            ) : null}
             {riskData.map((c) => (
               <tr key={c.id} className={TABLE_BODY_ROW}>
                 <td className="px-5 py-3.5 font-semibold text-ink">{c.fullName}</td>

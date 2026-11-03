@@ -8,8 +8,8 @@ export default function Topbar() {
   const unread = state.notifications.filter((n) => !n.read).length;
 
   return (
-    <header className="flex h-14 items-center gap-3 border-b border-slate-200/80 bg-white px-5">
-      <div className="flex max-w-md flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+    <header className="flex h-14 items-center gap-3 border-b border-slate-200/80 bg-white/95 px-5 backdrop-blur-sm">
+      <div className="flex max-w-md flex-1 items-center gap-2 rounded-xl border border-slate-200/90 bg-slate-50/90 px-3 py-2 transition focus-within:border-blue-200 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-500/10">
         <Search size={15} className="text-slate-400" />
         <input
           placeholder="Search customers, orders…"

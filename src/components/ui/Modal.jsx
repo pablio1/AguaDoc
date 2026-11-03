@@ -1,8 +1,8 @@
 // src/components/ui/Modal.jsx
 import { useEffect } from 'react';
+import { X } from 'lucide-react';
 
 export default function Modal({ title, onClose, children }) {
-  // Close on Escape key press
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handler);
@@ -11,18 +11,27 @@ export default function Modal({ title, onClose, children }) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/45 z-50 flex items-center justify-center"
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-navy/35 p-4 backdrop-blur-[2px]"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bg-white rounded-2xl p-6 w-[460px] max-w-[94vw] relative max-h-[90vh] overflow-y-auto">
-        <h2 className="text-base font-bold mb-4">{title}</h2>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+        className="relative max-h-[90vh] w-full max-w-[460px] overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_24px_48px_rgba(15,23,42,0.12)]"
+      >
+        <h2 id="modal-title" className="pr-8 font-display text-lg font-bold tracking-tight text-ink">
+          {title}
+        </h2>
         <button
+          type="button"
           onClick={onClose}
-          className="absolute top-4 right-4 text-gray-400 text-xl hover:text-gray-600 cursor-pointer"
+          aria-label="Close"
+          className="absolute right-3 top-3 flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-ink"
         >
-          ✕
+          <X size={18} />
         </button>
-        {children}
+        <div className="mt-4">{children}</div>
       </div>
     </div>
   );

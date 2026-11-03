@@ -13,6 +13,8 @@ import PageHeader from '../components/admin/PageHeader';
 import SectionCard from '../components/admin/SectionCard';
 import FilterPills from '../components/admin/FilterPills';
 import { TABLE_BODY_ROW, TABLE_HEAD_ROW } from '../components/admin/tableStyles';
+import EmptyState from '../components/admin/EmptyState';
+import { Users } from 'lucide-react';
 
 const PRICE_PER_GALLON = 40; // walk-ins pick up in person — no delivery fee added
 
@@ -27,6 +29,9 @@ export default function CustomersPage() {
   const [editForm, setEditForm]           = useState({ name: '', phone: '', addr: '', orders: '', agreementSigned: false });
 
   // Replaces filterCustomers()
+  const totalDebt = state.customers.reduce((sum, c) => sum + (Number(c.balance) || 0), 0);
+  const debtorCount = state.customers.filter((c) => c.balance > 0).length;
+
   const filtered = state.customers.filter(c => {
     if (filter === 'Debtors') return c.balance > 0;
     if (filter === 'Cleared') return c.balance === 0;
@@ -108,6 +113,21 @@ export default function CustomersPage() {
         </button>
       </PageHeader>
 
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="agua-card px-5 py-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">Walk-in accounts</p>
+          <p className="mt-2 font-display text-2xl font-bold text-ink">{state.customers.length}</p>
+        </div>
+        <div className="agua-card px-5 py-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">With balance</p>
+          <p className="mt-2 font-display text-2xl font-bold text-amber-700">{debtorCount}</p>
+        </div>
+        <div className="agua-card px-5 py-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">Total outstanding</p>
+          <p className="mt-2 font-display text-2xl font-bold text-red-600">₱{totalDebt.toLocaleString()}</p>
+        </div>
+      </div>
+
       <FilterPills options={['All', 'Debtors', 'Cleared']} value={filter} onChange={setFilter} className="!mb-0" />
 
       <SectionCard
@@ -163,7 +183,7 @@ export default function CustomersPage() {
                     <button
                       type="button"
                       onClick={() => navigate('/payments')}
-                      className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
+                      className="text-xs font-semibold text-blue-600 hover:text-blue-700"
                     >
                       Settle Payment
                     </button>
@@ -188,8 +208,16 @@ export default function CustomersPage() {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-5 py-10 text-center text-sm text-muted">
-                  No walk-in customers yet — add one with New customer.
+                <td colSpan={6}>
+                  <EmptyState
+                    icon={Users}
+                    title={filter === 'All' ? 'No walk-in customers yet' : 'No matches for this filter'}
+                    description={
+                      filter === 'All'
+                        ? 'Add a walk-in account to track credit and outstanding balances.'
+                        : 'Try another filter or add a new customer.'
+                    }
+                  />
                 </td>
               </tr>
             )}
@@ -202,7 +230,7 @@ export default function CustomersPage() {
         <Modal title="Register new customer" onClose={() => setShowAddModal(false)}>
           <div className="space-y-3">
             <div>
-              <label className="text-[12.5px] font-semibold text-gray-600">Full Name</label>
+              <label className="agua-label">Full Name</label>
               <input
                 value={form.name}
                 onChange={e => setForm({ ...form, name: e.target.value })}
@@ -211,7 +239,7 @@ export default function CustomersPage() {
               />
             </div>
             <div>
-              <label className="text-[12.5px] font-semibold text-gray-600">Phone Number</label>
+              <label className="agua-label">Phone Number</label>
               <input
                 value={form.phone}
                 onChange={e => setForm({ ...form, phone: e.target.value })}
@@ -220,7 +248,7 @@ export default function CustomersPage() {
               />
             </div>
             <div>
-              <label className="text-[12.5px] font-semibold text-gray-600">Delivery Address</label>
+              <label className="agua-label">Delivery Address</label>
               <input
                 value={form.addr}
                 onChange={e => setForm({ ...form, addr: e.target.value })}
@@ -255,7 +283,7 @@ export default function CustomersPage() {
         <Modal title={`Edit ${editingCustomer.fullName}`} onClose={() => setEditingCustomer(null)}>
           <div className="space-y-3">
             <div>
-              <label className="text-[12.5px] font-semibold text-gray-600">Full Name</label>
+              <label className="agua-label">Full Name</label>
               <input
                 value={editForm.name}
                 onChange={e => setEditForm({ ...editForm, name: e.target.value })}
@@ -263,7 +291,7 @@ export default function CustomersPage() {
               />
             </div>
             <div>
-              <label className="text-[12.5px] font-semibold text-gray-600">Phone Number</label>
+              <label className="agua-label">Phone Number</label>
               <input
                 value={editForm.phone}
                 onChange={e => setEditForm({ ...editForm, phone: e.target.value })}
@@ -271,7 +299,7 @@ export default function CustomersPage() {
               />
             </div>
             <div>
-              <label className="text-[12.5px] font-semibold text-gray-600">Delivery Address</label>
+              <label className="agua-label">Delivery Address</label>
               <input
                 value={editForm.addr}
                 onChange={e => setEditForm({ ...editForm, addr: e.target.value })}
@@ -279,7 +307,7 @@ export default function CustomersPage() {
               />
             </div>
             <div>
-              <label className="text-[12.5px] font-semibold text-gray-600">Orders (gallons on credit)</label>
+              <label className="agua-label">Orders (gallons on credit)</label>
               <input
                 type="number"
                 min="0"
@@ -288,24 +316,24 @@ export default function CustomersPage() {
                 className="agua-input mt-1"
                 placeholder="0"
               />
-              <p className="text-[11px] text-gray-400 mt-1.5">
+              <p className="mt-1.5 text-[11px] text-muted">
                 = ₱{(Number(editForm.orders) || 0) * PRICE_PER_GALLON} balance (₱{PRICE_PER_GALLON}/gallon, no delivery fee for walk-ins).
                 Recording an actual payment on the Payments page reduces this automatically instead.
               </p>
             </div>
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-              <label className="flex items-start gap-2 text-[12.5px] text-gray-700 cursor-pointer">
+            <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+              <label className="flex cursor-pointer items-start gap-2 text-[12.5px] text-ink">
                 <input
                   type="checkbox"
                   checked={editForm.agreementSigned}
                   onChange={e => setEditForm({ ...editForm, agreementSigned: e.target.checked })}
-                  className="mt-0.5 accent-[#0ea5c9]"
+                  className="mt-0.5 accent-blue-500"
                 />
                 <span>Signed paper agreement received from this customer</span>
               </label>
               {Number(editForm.orders) > 0 && !editForm.agreementSigned && (
-                <p className="text-[11px] text-yellow-700 mt-1.5 ml-5">
-                  ⚠ This customer has credit but no signed agreement on file. Use "🖨 Agreement" to print one for them to sign.
+                <p className="ml-5 mt-1.5 text-[11px] font-medium text-amber-700">
+                  This customer has credit but no signed agreement on file. Use Agreement to print one for them to sign.
                 </p>
               )}
             </div>

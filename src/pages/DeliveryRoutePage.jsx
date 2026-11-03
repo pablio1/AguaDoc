@@ -5,6 +5,8 @@ import 'leaflet/dist/leaflet.css';
 import { apiGetDeliveryRoute, apiUpdateOrder } from '../api';
 import { CARTO_ATTRIBUTION, cartoVoyagerUrl } from '../lib/mapTiles';
 import PageHeader from '../components/admin/PageHeader';
+import EmptyState from '../components/admin/EmptyState';
+import { MapPin, Route } from 'lucide-react';
 
 // Vite/webpack break Leaflet's default marker icon paths — rebuild them from CDN so pins actually render.
 delete L.Icon.Default.prototype._getIconUrl;
@@ -123,17 +125,32 @@ export default function DeliveryRoutePage() {
 
       <div className="flex min-h-0 flex-1 gap-4">
       <div className="agua-card flex w-80 shrink-0 flex-col overflow-hidden p-4">
+        <div className="mb-3 flex items-center gap-2 border-b border-slate-100 pb-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+            <Route size={16} />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-ink">Route stops</p>
+            <p className="text-[11px] text-muted">{loading ? 'Calculating…' : `${data.stops.length} pending`}</p>
+          </div>
+        </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {loading && <p className="text-sm text-muted">Calculating best route...</p>}
-          {error && <p className="text-sm text-red-500">{error}</p>}
+          {loading && <p className="py-4 text-center text-sm text-muted">Calculating best route…</p>}
+          {error && (
+            <p className="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
+          )}
           {!loading && !error && data.stops.length === 0 && (
-            <p className="text-sm text-muted">No pending deliveries with a mapped address right now.</p>
+            <EmptyState
+              icon={MapPin}
+              title="No mapped stops"
+              description="Pending deliveries with a geocoded address appear here and on the map."
+            />
           )}
 
           <ol className="space-y-3">
             {data.stops.map((stop, i) => (
-              <li key={stop.id} className="rounded-xl border border-slate-100 p-3">
+              <li key={stop.id} className="rounded-xl border border-slate-100 p-3 transition hover:border-blue-100 hover:bg-slate-50/80">
                 <div className="flex items-start gap-2">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-500 text-xs font-bold text-white">
                     {i + 1}

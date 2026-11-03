@@ -39,7 +39,7 @@ export default function LoginPage({ onLogin, onGoRegister, onGoLanding }) {
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">Username or email</label>
-          <div className="flex items-center gap-2 rounded-[0.9rem] border border-slate-200/80 bg-white px-3 py-2.5 focus-within:border-accent focus-within:ring-4 focus-within:ring-cyan-500/15">
+          <div className="flex items-center gap-2 rounded-[0.9rem] border border-slate-200/80 bg-white px-3 py-2.5 focus-within:border-accent focus-within:ring-4 focus-within:ring-blue-500/15">
             <User size={16} className="text-slate-400" />
             <input
               type="text"
@@ -54,7 +54,7 @@ export default function LoginPage({ onLogin, onGoRegister, onGoLanding }) {
 
         <div>
           <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">Password</label>
-          <div className="flex items-center gap-2 rounded-[0.9rem] border border-slate-200/80 bg-white px-3 py-2.5 focus-within:border-accent focus-within:ring-4 focus-within:ring-cyan-500/15">
+          <div className="flex items-center gap-2 rounded-[0.9rem] border border-slate-200/80 bg-white px-3 py-2.5 focus-within:border-accent focus-within:ring-4 focus-within:ring-blue-500/15">
             <Lock size={16} className="text-slate-400" />
             <input
               type={showPass ? 'text' : 'password'}

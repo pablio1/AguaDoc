@@ -1,5 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
-import { LayoutDashboard, ShoppingCart, CreditCard, LogOut, Bell, User, Info, MapPinned, Radio } from 'lucide-react';
+import {
+  LayoutDashboard, PlusCircle, Package, CreditCard, LogOut, Bell, User, Info,
+  MapPinned, Radio, Search, ClipboardList, Clock, CheckCircle2, Truck, MapPin,
+} from 'lucide-react';
+import BrandMark from '../components/BrandMark';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -24,7 +28,7 @@ const riderIcon = L.divIcon({
 });
 const homeIcon = L.divIcon({
   className: 'aguadoc-home-marker',
-  html: `<div style="background:#0ea5c9;color:white;font-size:15px;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.5);">🏠</div>`,
+  html: `<div style="background:#3b82f6;color:white;font-size:15px;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.5);">🏠</div>`,
   iconSize: [30, 30], iconAnchor: [15, 15],
 });
 const RIDER_STALE_MS = 2 * 60 * 1000;
@@ -48,22 +52,22 @@ function RecenterOnRider({ lat, lng }) {
 }
 
 const NAV = [
-  { icon: LayoutDashboard, label: 'Dashboard',       id: 'dashboard' },
-  { icon: ShoppingCart,    label: 'Request Service', id: 'request'   },
-  { icon: ShoppingCart,    label: 'My Order',        id: 'orders'    },
-  { icon: CreditCard,      label: 'Billing History', id: 'billing'   },
-  { icon: User,            label: 'Edit Profile',    id: 'profile'   },
+  { icon: LayoutDashboard, label: 'Dashboard',       id: 'dashboard', short: 'Home'      },
+  { icon: PlusCircle,      label: 'Request Service', id: 'request',   short: 'Request'   },
+  { icon: Package,         label: 'My Order',        id: 'orders',    short: 'Orders'    },
+  { icon: CreditCard,      label: 'Billing History', id: 'billing',   short: 'Billing'   },
+  { icon: User,            label: 'Edit Profile',    id: 'profile',   short: 'Profile'   },
 ];
 
 const STATUS_STYLE = {
-  Pending:            'bg-yellow-50 text-yellow-600',
-  Assigned:           'bg-indigo-50 text-indigo-600',
-  Accepted:           'bg-sky-50 text-sky-600',
-  Processing:         'bg-blue-50 text-blue-600',
-  'Out for Delivery': 'bg-emerald-50 text-emerald-600',
-  Active:             'bg-blue-50 text-blue-600',
-  Ready:              'bg-green-50 text-green-600',
-  Delivered:          'bg-gray-100 text-gray-500',
+  Pending:            'bg-amber-50 text-amber-700 ring-1 ring-amber-100',
+  Assigned:           'bg-blue-50 text-blue-700 ring-1 ring-blue-100',
+  Accepted:           'bg-sky-50 text-sky-700 ring-1 ring-sky-100',
+  Processing:         'bg-blue-50 text-blue-700 ring-1 ring-blue-100',
+  'Out for Delivery': 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100',
+  Active:             'bg-blue-50 text-blue-700 ring-1 ring-blue-100',
+  Ready:              'bg-green-50 text-green-700 ring-1 ring-green-100',
+  Delivered:          'bg-slate-100 text-slate-500 ring-1 ring-slate-200/80',
 };
 
 export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
@@ -193,10 +197,10 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
   };
 
   const STATS = [
-    { emoji: '📋', label: 'TOTAL ORDER',     key: 'total'     },
-    { emoji: '⏳', label: 'ACTIVE SERVICES', key: 'active'    },
-    { emoji: '✅', label: 'READY',           key: 'ready'     },
-    { emoji: '🏁', label: 'DELIVERED',       key: 'delivered' },
+    { icon: ClipboardList, label: 'Total orders',     key: 'total'     },
+    { icon: Clock,         label: 'Active services',  key: 'active'    },
+    { icon: CheckCircle2,  label: 'Ready',            key: 'ready'     },
+    { icon: Truck,         label: 'Delivered',        key: 'delivered' },
   ];
 
   async function handleProfileSave(e) {
@@ -265,47 +269,59 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
       {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
 
       {/* Sidebar (desktop/tablet only — mobile uses the bottom nav bar instead) */}
-      <aside className="agua-dark-mesh hidden w-60 shrink-0 flex-col px-4 py-6 md:flex">
-        <div className="mb-8 px-1">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 to-teal-600 text-lg shadow-lg shadow-cyan-500/30">
-              💧
-            </div>
-            <div>
-              <p className="font-display text-lg font-bold tracking-tight text-white">AguaDoc</p>
-              <p className="text-[11px] text-white/45">Customer portal</p>
-            </div>
-          </div>
+      <aside className="hidden h-screen w-[248px] min-w-[248px] shrink-0 flex-col bg-[#0f172a] text-white md:flex">
+        <div className="border-b border-white/10 px-5 py-5">
+          <BrandMark light size="sm" />
+          <p className="mt-1.5 pl-[3.15rem] text-[10px] font-medium uppercase tracking-[0.12em] text-slate-400">
+            Customer portal
+          </p>
         </div>
-        <nav className="flex flex-1 flex-col gap-1">
+        <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-4">
           {NAV.map(({ icon: Icon, label, id }) => (
-            <button key={id} type="button" onClick={() => setActive(id)}
-              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition
-                ${active === id
-                  ? 'bg-gradient-to-r from-cyan-400/25 to-teal-500/10 text-cyan-100 ring-1 ring-cyan-300/25'
-                  : 'text-white/55 hover:bg-white/8 hover:text-white'}`}>
-              <Icon size={16} />{label}
+            <button
+              key={id}
+              type="button"
+              onClick={() => setActive(id)}
+              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] font-medium transition ${
+                active === id
+                  ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/25'
+                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
+              }`}
+            >
+              <Icon size={16} className="shrink-0 opacity-90" />
+              {label}
             </button>
           ))}
         </nav>
 
-        <button
-          type="button"
-          onClick={onLogout}
-          className="mt-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-white/50 transition hover:bg-rose-500/15 hover:text-rose-200"
-        >
-          <LogOut size={16} /> Sign out
-        </button>
+        <div className="space-y-3 border-t border-white/10 p-4">
+          <button
+            type="button"
+            onClick={onLogout}
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-[13px] font-medium text-slate-400 transition hover:bg-rose-500/15 hover:text-rose-200"
+          >
+            <LogOut size={15} /> Sign out
+          </button>
+          <div className="flex items-center gap-3 rounded-2xl bg-white/5 px-3 py-3 ring-1 ring-white/10">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-500 text-[11px] font-bold text-white">
+              {initials}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-xs font-semibold text-white">{firstName}</p>
+              <p className="truncate text-[11px] text-slate-400">{user?.email || 'Customer'}</p>
+            </div>
+          </div>
+        </div>
       </aside>
 
       {/* Main */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
 
         {/* Topbar */}
-        <header className="relative flex items-center gap-2 border-b border-slate-200/70 bg-white/75 px-3 py-3 backdrop-blur-xl sm:gap-4 sm:px-6">
-          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-200/80 bg-foam/80 px-3 py-2 sm:max-w-sm sm:px-4">
-            <span className="shrink-0 text-sm text-slate-400">🔍</span>
-            <input placeholder="Search orders…" className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-slate-400" />
+        <header className="relative flex h-14 items-center gap-2 border-b border-slate-200/80 bg-white px-3 sm:gap-3 sm:px-5">
+          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 sm:max-w-md">
+            <Search size={15} className="shrink-0 text-slate-400" />
+            <input placeholder="Search orders…" className="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-slate-400" />
           </div>
           <button
             type="button"
@@ -355,7 +371,7 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
                       key={n.id}
                       onClick={() => handleMarkNotifRead(n)}
                       className={`cursor-pointer border-b border-slate-50 px-4 py-2.5 last:border-b-0 hover:bg-slate-50
-                        ${n.read ? '' : 'bg-cyan-50/70'}`}
+                        ${n.read ? '' : 'bg-blue-50/80'}`}
                     >
                       <p className="text-[12.5px] text-slate-700">{n.message}</p>
                       <p className="mt-0.5 text-[11px] text-slate-400">{timeAgo(n.createdAt)}</p>
@@ -371,10 +387,18 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
         <main className="agua-mesh flex-1 space-y-5 overflow-y-auto p-4 pb-24 sm:p-6 md:pb-6">
 
           {checkoutBanner && (
-            <div className={`rounded-xl px-4 py-3 text-sm font-medium flex items-center justify-between
-              ${checkoutBanner.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-yellow-50 text-yellow-700 border border-yellow-200'}`}>
-              <span>{checkoutBanner.type === 'success' ? '✅' : '⚠️'} {checkoutBanner.text}</span>
-              <button onClick={() => setCheckoutBanner(null)} className="text-xs underline opacity-70 hover:opacity-100">Dismiss</button>
+            <div className={`agua-card flex items-center justify-between gap-3 px-4 py-3 text-sm font-medium ${
+              checkoutBanner.type === 'success'
+                ? 'border-emerald-200/80 bg-emerald-50/90 text-emerald-800'
+                : 'border-amber-200/80 bg-amber-50/90 text-amber-800'
+            }`}>
+              <span className="flex items-center gap-2">
+                {checkoutBanner.type === 'success'
+                  ? <CheckCircle2 size={18} className="shrink-0 text-emerald-600" />
+                  : <Info size={18} className="shrink-0 text-amber-600" />}
+                {checkoutBanner.text}
+              </span>
+              <button type="button" onClick={() => setCheckoutBanner(null)} className="shrink-0 text-xs font-semibold underline opacity-70 hover:opacity-100">Dismiss</button>
             </div>
           )}
 
@@ -399,7 +423,7 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
                     setActive('orders');
                     setTrackingOrderId(outForDeliveryOrders[0].id);
                   }}
-                  className="w-full text-left rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-cyan-50 px-5 py-4 shadow-sm hover:shadow-md transition"
+                  className="agua-card w-full text-left border-emerald-200/80 bg-gradient-to-r from-emerald-50/90 to-white px-5 py-4 transition hover:shadow-md"
                 >
                   <div className="flex items-center gap-3">
                     <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-md shadow-emerald-500/30">
@@ -419,32 +443,40 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
               )}
 
               {/* Welcome banner */}
-              <div className="agua-dark-mesh flex flex-col gap-4 rounded-[1.5rem] px-5 py-6 shadow-xl shadow-slate-900/10 sm:flex-row sm:items-center sm:justify-between sm:px-7">
-                <div className="agua-fade-up">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200/70">Customer dashboard</p>
-                  <h2 className="mt-1 font-display text-2xl font-bold tracking-tight text-white">Good day, {firstName}</h2>
-                  <p className="mt-1 text-sm text-white/55">Your orders, deliveries, and account in one place.</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-teal-600 text-sm font-bold text-white shadow-lg shadow-cyan-500/30">
-                    {initials}
+              <div className="agua-card relative overflow-hidden px-5 py-6 sm:px-7">
+                <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-blue-500/10 blur-2xl" />
+                <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="agua-fade-up">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent2">Customer dashboard</p>
+                    <h2 className="mt-1 font-display text-2xl font-bold tracking-tight text-ink">Good day, {firstName}</h2>
+                    <p className="mt-1 text-sm text-muted">Your orders, deliveries, and account in one place.</p>
                   </div>
-                  <div className="min-w-0 text-sm">
-                    <p className="truncate font-semibold text-white">{user?.username || user?.fullName}</p>
-                    <p className="truncate text-xs text-white/45">{user?.email}</p>
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-500 text-sm font-bold text-white shadow-lg shadow-blue-500/25">
+                      {initials}
+                    </div>
+                    <div className="min-w-0 text-sm">
+                      <p className="truncate font-semibold text-ink">{user?.username || user?.fullName}</p>
+                      <p className="truncate text-xs text-muted">{user?.email}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActive('request')}
+                      className="agua-btn agua-btn-primary ml-1 hidden shrink-0 !py-2 !text-xs sm:inline-flex"
+                    >
+                      <PlusCircle size={14} /> New order
+                    </button>
                   </div>
-                  <button type="button" onClick={onLogout}
-                    className="ml-2 hidden shrink-0 items-center gap-1.5 rounded-xl border border-white/15 px-3 py-2 text-sm text-white/70 transition hover:bg-white/10 hover:text-white sm:flex">
-                    <LogOut size={14} /> Sign out
-                  </button>
                 </div>
               </div>
 
               {/* Stats */}
               <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
-                {STATS.map(({ emoji, label, key }) => (
+                {STATS.map(({ icon: StatIcon, label, key }) => (
                   <div key={key} className="agua-card px-5 py-5 transition hover:-translate-y-0.5 hover:shadow-lg">
-                    <div className="mb-3 text-2xl">{emoji}</div>
+                    <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-accent2 ring-1 ring-blue-100">
+                      <StatIcon size={18} />
+                    </div>
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">{label}</p>
                     <p className="mt-1 font-display text-2xl font-bold text-ink">
                       {loading ? '…' : stats[key]}
@@ -454,37 +486,42 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
               </div>
 
               {/* Recent Activity */}
-              <div className="agua-card p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-[#0f172a]">Recent Service & Order Activity</h3>
+              <div className="agua-card overflow-hidden">
+                <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+                  <div>
+                    <h3 className="font-display text-base font-bold text-ink">Recent activity</h3>
+                    <p className="mt-0.5 text-xs text-muted">Latest orders and service requests</p>
+                  </div>
                   <button
+                    type="button"
                     onClick={() => setActive('orders')}
-                    className="text-xs text-[#0ea5c9] border border-[#0ea5c9] px-3 py-1 rounded-lg hover:bg-[#0ea5c9] hover:text-white transition">
-                    View All
+                    className="agua-btn agua-btn-secondary !py-1.5 !text-xs"
+                  >
+                    View all
                   </button>
                 </div>
-                <div className="overflow-x-auto">
-                <table className="w-full text-sm min-w-[420px]">
+                <div className="overflow-x-auto px-5 pb-4">
+                <table className="w-full min-w-[420px] text-sm">
                   <thead>
-                    <tr className="text-gray-400 text-xs border-b border-gray-100">
-                      <th className="text-left pb-2 font-semibold">REF #</th>
-                      <th className="text-left pb-2 font-semibold">TYPE</th>
-                      <th className="text-left pb-2 font-semibold">DATE</th>
-                      <th className="text-left pb-2 font-semibold">STATUS</th>
+                    <tr className="border-b border-slate-100 text-xs text-muted">
+                      <th className="pb-2 text-left font-semibold">Ref</th>
+                      <th className="pb-2 text-left font-semibold">Type</th>
+                      <th className="pb-2 text-left font-semibold">Date</th>
+                      <th className="pb-2 text-left font-semibold">Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {loading ? (
-                      <tr><td colSpan={4} className="text-center text-gray-400 py-8">Loading...</td></tr>
+                      <tr><td colSpan={4} className="py-8 text-center text-muted">Loading…</td></tr>
                     ) : recentOrders.length === 0 ? (
-                      <tr><td colSpan={4} className="text-center text-gray-400 py-8">No activity yet...</td></tr>
+                      <tr><td colSpan={4} className="py-8 text-center text-muted">No activity yet.</td></tr>
                     ) : recentOrders.map(order => (
-                      <tr key={order.id} className="border-b border-gray-50">
-                        <td className="py-2 text-gray-700 font-mono text-xs">{order.ref || order.id}</td>
-                        <td className="py-2 text-gray-700">{order.type}</td>
-                        <td className="py-2 text-gray-500">{new Date(order.date).toLocaleDateString()}</td>
-                        <td className="py-2">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLE[order.status] || 'bg-gray-100 text-gray-500'}`}>
+                      <tr key={order.id} className="border-b border-slate-50 last:border-0">
+                        <td className="py-2.5 font-mono text-xs text-ink">{order.ref || order.id}</td>
+                        <td className="py-2.5 text-ink">{order.type}</td>
+                        <td className="py-2.5 text-muted">{new Date(order.date).toLocaleDateString()}</td>
+                        <td className="py-2.5">
+                          <span className={`agua-badge ${STATUS_STYLE[order.status] || 'bg-slate-100 text-slate-500 ring-1 ring-slate-200/80'}`}>
                             {order.status}
                           </span>
                         </td>
@@ -501,16 +538,17 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
           {active === 'orders' && (
             <div className="space-y-4">
               {/* Header */}
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                  <h2 className="text-lg font-bold text-[#0f172a]">My Orders</h2>
-                  <p className="text-sm text-gray-400 mt-0.5">Track all your orders and their current status.</p>
+                  <h2 className="font-display text-2xl font-bold tracking-tight text-ink">My orders</h2>
+                  <p className="mt-1 text-sm text-muted">Track all your orders and their current status.</p>
                 </div>
                 <button
+                  type="button"
                   onClick={() => setActive('request')}
-                  className="bg-[#0ea5c9] hover:bg-[#0284a8] text-white text-sm font-semibold px-4 py-2 rounded-xl transition"
+                  className="agua-btn agua-btn-primary shrink-0 !py-2"
                 >
-                  + New Order
+                  <PlusCircle size={16} /> New order
                 </button>
               </div>
 
@@ -518,14 +556,17 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
                 <div className="agua-card p-10 text-center text-gray-400">Loading...</div>
               ) : orders.length === 0 ? (
                 <div className="agua-card p-10 text-center">
-                  <div className="text-4xl mb-3">📦</div>
-                  <p className="text-gray-500 font-medium">No orders yet</p>
-                  <p className="text-gray-400 text-sm mt-1">Place your first order to get started.</p>
+                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-accent2 ring-1 ring-blue-100">
+                    <Package size={26} />
+                  </div>
+                  <p className="font-semibold text-ink">No orders yet</p>
+                  <p className="mt-1 text-sm text-muted">Place your first order to get started.</p>
                   <button
+                    type="button"
                     onClick={() => setActive('request')}
-                    className="mt-4 bg-[#0ea5c9] hover:bg-[#0284a8] text-white text-sm font-semibold px-5 py-2 rounded-xl transition"
+                    className="agua-btn agua-btn-primary mt-5"
                   >
-                    Request Service
+                    Request service
                   </button>
                 </div>
               ) : (
@@ -561,17 +602,7 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
                     ? ['🕐', '⚙️', '✅']
                     : ['🕐', '🛵', '🚚', '✅'];
 
-                  const statusColor = {
-                    'Pending':            'bg-yellow-100 text-yellow-700',
-                    'Assigned':           'bg-indigo-100 text-indigo-700',
-                    'Accepted':           'bg-sky-100 text-sky-700',
-                    'Processing':         'bg-blue-100 text-blue-700',
-                    'Active':             'bg-blue-100 text-blue-700',
-                    'Out for Delivery':   'bg-emerald-100 text-emerald-700',
-                    'Ready':              'bg-green-100 text-green-700',
-                    'Ready to Go':        'bg-green-100 text-green-700',
-                    'Delivered':           'bg-gray-100 text-gray-500',
-                  };
+                  const statusColor = STATUS_STYLE;
 
                   return (
                     <div key={order.id} className="agua-card p-5">
@@ -582,7 +613,7 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
                             <span className="font-mono text-sm font-bold text-[#0f172a]">
                               {order.ref || order.id}
                             </span>
-                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusColor[order.status] || 'bg-gray-100 text-gray-500'}`}>
+                            <span className={`agua-badge ${statusColor[order.status] || 'bg-slate-100 text-slate-500 ring-1 ring-slate-200/80'}`}>
                               {order.status}
                             </span>
                           </div>
@@ -595,7 +626,7 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="text-lg font-black text-[#0ea5c9]">₱{order.total}</p>
+                          <p className="font-display text-lg font-bold text-accent2">₱{order.total}</p>
                           <p className="text-xs text-gray-400 mt-0.5">
                             {isWalkin ? 'Pay on arrival' : order.payMethod || 'Online payment'}
                           </p>
@@ -610,10 +641,10 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
                           return (
                             <div key={i} className="flex items-center flex-1 last:flex-none">
                               <div className="flex flex-col items-center">
-                                <div className={`w-9 h-9 rounded-full flex items-center justify-center text-base border-2 transition
-                                  ${done    ? 'bg-[#0ea5c9] border-[#0ea5c9]'
-                                  : active  ? 'bg-white border-[#0ea5c9]'
-                                           : 'bg-white border-gray-200'}`}>
+                                <div className={`flex h-9 w-9 items-center justify-center rounded-full border-2 text-base transition
+                                  ${done    ? 'border-accent bg-accent text-white'
+                                  : active  ? 'border-accent bg-white text-accent2'
+                                           : 'border-slate-200 bg-white'}`}>
                                   {done ? (
                                     <span className="text-white text-sm">✓</span>
                                   ) : (
@@ -622,13 +653,13 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
                                     </span>
                                   )}
                                 </div>
-                                <span className={`text-xs mt-1.5 font-semibold text-center leading-tight
-                                  ${done ? 'text-[#0ea5c9]' : active ? 'text-[#0f172a]' : 'text-gray-300'}`}>
+                                <span className={`mt-1.5 text-center text-xs font-semibold leading-tight
+                                  ${done ? 'text-accent2' : active ? 'text-ink' : 'text-slate-300'}`}>
                                   {label}
                                 </span>
                               </div>
                               {i < steps.length - 1 && (
-                                <div className={`flex-1 h-0.5 mx-2 mb-5 rounded ${done ? 'bg-[#0ea5c9]' : 'bg-gray-200'}`} />
+                                <div className={`mx-2 mb-5 h-0.5 flex-1 rounded ${done ? 'bg-accent' : 'bg-slate-200'}`} />
                               )}
                             </div>
                           );
@@ -637,8 +668,8 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
 
                       {/* Address/notes if delivery */}
                       {!isWalkin && order.address && (
-                        <div className="mt-3 pt-3 border-t border-gray-100 flex items-start gap-2 text-xs text-gray-400">
-                          <span>📍</span>
+                        <div className="mt-3 flex items-start gap-2 border-t border-slate-100 pt-3 text-xs text-muted">
+                          <MapPin size={14} className="mt-0.5 shrink-0 text-accent2" />
                           <span>{order.address}</span>
                         </div>
                       )}
@@ -650,7 +681,7 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
                             <button
                               type="button"
                               onClick={() => setTrackingOrderId(trackingOrderId === order.id ? null : order.id)}
-                              className="w-full flex items-center justify-between gap-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-3 text-white shadow-md shadow-emerald-500/25"
+                              className="flex w-full items-center justify-between gap-3 rounded-xl bg-emerald-600 px-4 py-3 text-white shadow-md shadow-emerald-600/20"
                             >
                               <span className="flex items-center gap-2 text-sm font-bold">
                                 <Radio size={16} className="animate-pulse" />
@@ -662,7 +693,7 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
                             <button
                               type="button"
                               onClick={() => setTrackingOrderId(trackingOrderId === order.id ? null : order.id)}
-                              className="text-xs font-semibold text-[#0ea5c9] hover:underline"
+                              className="text-xs font-semibold text-accent2 hover:underline"
                             >
                               {trackingOrderId === order.id ? '▲ Hide map' : '🛵 Preview delivery map'}
                             </button>
@@ -704,7 +735,7 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
                                       {trackRoute.length > 1 && (
                                         <Polyline
                                           positions={trackRoute}
-                                          pathOptions={{ color: '#0ea5c9', weight: 5, opacity: 0.85 }}
+                                          pathOptions={{ color: '#3b82f6', weight: 5, opacity: 0.85 }}
                                         />
                                       )}
                                     </MapContainer>
@@ -737,9 +768,15 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
           
           {/* ── Billing History ── */}
           {active === 'billing' && (
-            <div className="agua-card p-5">
-              <h3 className="font-semibold text-[#0f172a] mb-4">Billing History</h3>
-              <p className="text-gray-400 text-sm text-center py-8">No billing records yet...</p>
+            <div className="space-y-4">
+              <div>
+                <h2 className="font-display text-2xl font-bold tracking-tight text-ink">Billing history</h2>
+                <p className="mt-1 text-sm text-muted">Past payments and invoices will appear here.</p>
+              </div>
+              <div className="agua-card p-10 text-center">
+                <CreditCard size={28} className="mx-auto mb-3 text-slate-300" />
+                <p className="text-sm text-muted">No billing records yet.</p>
+              </div>
             </div>
           )}
 
@@ -747,18 +784,22 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
           {active === 'profile' && (
             <div className="max-w-xl space-y-5">
               {/* Profile header card */}
-              <div className="agua-card p-5 flex items-center gap-4">
-                <div className="w-14 h-14 rounded-full bg-[#0ea5c9] flex items-center justify-center text-white font-bold text-xl shrink-0">
+              <div>
+                <h2 className="font-display text-2xl font-bold tracking-tight text-ink">Edit profile</h2>
+                <p className="mt-1 text-sm text-muted">Update your contact details and password.</p>
+              </div>
+              <div className="agua-card flex items-center gap-4 p-5">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-blue-500 text-xl font-bold text-white shadow-lg shadow-blue-500/25">
                   {initials}
                 </div>
                 <div>
-                  <p className="font-semibold text-[#0f172a]">{user?.fullName || user?.username}</p>
-                  <p className="text-gray-400 text-sm">@{user?.username}</p>
+                  <p className="font-semibold text-ink">{user?.fullName || user?.username}</p>
+                  <p className="text-sm text-muted">@{user?.username}</p>
                 </div>
               </div>
 
-              <form onSubmit={handleProfileSave} className="agua-card p-5 space-y-4">
-                <h3 className="font-semibold text-[#0f172a]">Profile Information</h3>
+              <form onSubmit={handleProfileSave} className="agua-card space-y-4 p-5">
+                <h3 className="font-display text-base font-bold text-ink">Profile information</h3>
 
                 {profileMsg && (
                   <div className={`text-sm rounded-lg px-3 py-2 ${
@@ -771,74 +812,74 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
                 )}
 
                 <div>
-                  <label className="text-xs font-semibold text-gray-500">Full Name</label>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted">Full name</label>
                   <input
                     value={profileForm.fullName}
                     onChange={e => setProfileForm(f => ({ ...f, fullName: e.target.value }))}
-                    className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0ea5c9]"
+                    className="agua-input mt-1.5"
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-gray-500">Email</label>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted">Email</label>
                   <input
                     type="email"
                     value={profileForm.email}
                     onChange={e => setProfileForm(f => ({ ...f, email: e.target.value }))}
-                    className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0ea5c9]"
+                    className="agua-input mt-1.5"
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-gray-500">Phone</label>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted">Phone</label>
                   <input
                     value={profileForm.phone}
                     onChange={e => setProfileForm(f => ({ ...f, phone: e.target.value }))}
-                    className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0ea5c9]"
+                    className="agua-input mt-1.5"
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-gray-500">Address</label>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted">Address</label>
                   <input
                     value={profileForm.address}
                     onChange={e => setProfileForm(f => ({ ...f, address: e.target.value }))}
-                    className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0ea5c9]"
+                    className="agua-input mt-1.5"
                   />
                 </div>
 
-                <hr className="border-gray-100" />
+                <hr className="border-slate-100" />
 
-                <h3 className="font-semibold text-[#0f172a]">Change Password</h3>
-                <p className="text-xs text-gray-400 -mt-2">Leave blank if you don't want to change your password.</p>
+                <h3 className="font-display text-base font-bold text-ink">Change password</h3>
+                <p className="-mt-2 text-xs text-muted">Leave blank if you don&apos;t want to change your password.</p>
 
                 <div>
-                  <label className="text-xs font-semibold text-gray-500">Current Password</label>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted">Current password</label>
                   <input
                     type="password"
                     value={pwForm.currentPassword}
                     onChange={e => setPwForm(f => ({ ...f, currentPassword: e.target.value }))}
-                    className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0ea5c9]"
+                    className="agua-input mt-1.5"
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="text-xs font-semibold text-gray-500">New Password</label>
+                    <label className="text-xs font-semibold uppercase tracking-wide text-muted">New password</label>
                     <input
                       type="password"
                       value={pwForm.newPassword}
                       onChange={e => setPwForm(f => ({ ...f, newPassword: e.target.value }))}
-                      className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0ea5c9]"
+                      className="agua-input mt-1.5"
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-semibold text-gray-500">Confirm New Password</label>
+                    <label className="text-xs font-semibold uppercase tracking-wide text-muted">Confirm new password</label>
                     <input
                       type="password"
                       value={pwForm.confirmPassword}
                       onChange={e => setPwForm(f => ({ ...f, confirmPassword: e.target.value }))}
-                      className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0ea5c9]"
+                      className="agua-input mt-1.5"
                     />
                   </div>
                 </div>
@@ -846,9 +887,9 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
                 <button
                   type="submit"
                   disabled={profileSaving}
-                  className="bg-[#0ea5c9] hover:bg-[#0284a8] disabled:opacity-50 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition"
+                  className="agua-btn agua-btn-primary disabled:opacity-50"
                 >
-                  {profileSaving ? 'Saving...' : 'Save Changes'}
+                  {profileSaving ? 'Saving…' : 'Save changes'}
                 </button>
               </form>
             </div>
@@ -856,21 +897,24 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
         </main>
 
         {/* Bottom nav (mobile/tablet only — desktop uses the sidebar instead) */}
-        <nav className="fixed bottom-0 left-0 right-0 z-30 flex items-stretch border-t border-slate-200/80 bg-white/90 backdrop-blur-xl md:hidden">
-          {NAV.map(({ icon: Icon, label, id }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setActive(id)}
-              className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 text-[10px] font-semibold transition
-                ${active === id ? 'text-accent2' : 'text-slate-400'}`}
-            >
-              <span className={`rounded-xl p-1.5 ${active === id ? 'bg-cyan-50 text-accent2' : ''}`}>
-                <Icon size={18} />
-              </span>
-              <span className="text-center leading-none">{label.split(' ')[0]}</span>
-            </button>
-          ))}
+        <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200/80 bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_24px_rgba(15,23,42,0.06)] backdrop-blur-xl md:hidden">
+          <div className="flex items-stretch">
+            {NAV.map(({ icon: Icon, id, short }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setActive(id)}
+                className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 text-[10px] font-semibold transition ${
+                  active === id ? 'text-accent2' : 'text-slate-400'
+                }`}
+              >
+                <span className={`rounded-xl p-1.5 ${active === id ? 'bg-blue-50 text-accent2' : ''}`}>
+                  <Icon size={18} strokeWidth={active === id ? 2.25 : 2} />
+                </span>
+                <span className="text-center leading-none">{short}</span>
+              </button>
+            ))}
+          </div>
         </nav>
       </div>
     </div>

@@ -6,6 +6,8 @@ import { useApp } from '../context/AppContext';
 import PageHeader from '../components/admin/PageHeader';
 import SectionCard from '../components/admin/SectionCard';
 import { TABLE_BODY_ROW, TABLE_HEAD_ROW } from '../components/admin/tableStyles';
+import EmptyState from '../components/admin/EmptyState';
+import { BellRing, ShoppingBag, Users } from 'lucide-react';
 
 const PRICE = 50;
 
@@ -253,7 +255,11 @@ export default function DashboardPage() {
 
         <SectionCard title="System alerts" description="Operational items that need a look" bodyClassName="px-5 pb-5 pt-2">
           {alerts.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted">All clear — no alerts right now.</p>
+            <EmptyState
+              icon={BellRing}
+              title="All clear"
+              description="No operational alerts at the moment. Low stock and overdue balances will show here."
+            />
           ) : (
             <ul className="space-y-2">
               {alerts.map((alert, i) => (
@@ -279,6 +285,17 @@ export default function DashboardPage() {
               </tr>
             </thead>
             <tbody>
+              {bestCustomers.length === 0 ? (
+                <tr>
+                  <td colSpan={4}>
+                    <EmptyState
+                      icon={Users}
+                      title="No customer activity yet"
+                      description="Top payers appear here once orders or payments are recorded."
+                    />
+                  </td>
+                </tr>
+              ) : null}
               {bestCustomers.map((c, i) => (
                 <tr key={c.id} className={TABLE_BODY_ROW}>
                   <td className="px-5 py-3.5 font-semibold text-slate-400">{i + 1}</td>
@@ -302,6 +319,17 @@ export default function DashboardPage() {
               </tr>
             </thead>
             <tbody>
+              {recentOrders.length === 0 ? (
+                <tr>
+                  <td colSpan={4}>
+                    <EmptyState
+                      icon={ShoppingBag}
+                      title="No orders yet"
+                      description="Recent orders from the station will show up here."
+                    />
+                  </td>
+                </tr>
+              ) : null}
               {recentOrders.map((o) => {
                 const id = o.userId || o.custId;
                 const customer =

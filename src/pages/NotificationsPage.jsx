@@ -5,6 +5,8 @@ import { showToast } from '../components/ui/Toast';
 import { apiMarkNotificationRead, apiMarkAllNotificationsRead } from '../api';
 import PageHeader from '../components/admin/PageHeader';
 import SectionCard from '../components/admin/SectionCard';
+import EmptyState from '../components/admin/EmptyState';
+import { Bell } from 'lucide-react';
 
 const TABS = ['all', 'unread'];
 
@@ -16,11 +18,11 @@ const DOT_STYLE = {
   System:    'bg-gray-400',
 };
 const BADGE_STYLE = {
-  Order:     'bg-blue-100 text-blue-800',
-  Payment:   'bg-green-100 text-green-800',
-  Debt:      'bg-red-100 text-red-800',
-  Inventory: 'bg-orange-100 text-orange-800',
-  System:    'bg-gray-100 text-gray-700',
+  Order: 'bg-blue-50 text-blue-700',
+  Payment: 'bg-emerald-50 text-emerald-700',
+  Debt: 'bg-red-50 text-red-700',
+  Inventory: 'bg-amber-50 text-amber-800',
+  System: 'bg-slate-100 text-slate-600',
 };
 
 function timeAgo(dateStr) {
@@ -118,7 +120,15 @@ export default function NotificationsPage() {
           bodyClassName="max-h-[460px] overflow-y-auto px-3 pb-3 pt-1"
         >
           {filtered.length === 0 ? (
-            <p className="py-10 text-center text-sm text-muted">No notifications.</p>
+            <EmptyState
+              icon={Bell}
+              title={tab === 'unread' ? 'No unread notifications' : 'No notifications yet'}
+              description={
+                tab === 'unread'
+                  ? 'You are caught up. Switch to All to browse past alerts.'
+                  : 'Order, payment, and inventory alerts will show up here.'
+              }
+            />
           ) : (
             filtered.map((n) => (
               <div
