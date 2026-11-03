@@ -9,6 +9,7 @@ import FilterPills from '../components/admin/FilterPills';
 import { TABLE_BODY_ROW, TABLE_HEAD_ROW } from '../components/admin/tableStyles';
 import EmptyState from '../components/admin/EmptyState';
 import { FileSpreadsheet } from 'lucide-react';
+import { formatMoney, sumMoney } from '../lib/money';
 
 export default function ReportsPage() {
   const { state } = useApp();
@@ -17,9 +18,9 @@ export default function ReportsPage() {
   const canvasRef = useRef(null);
 
   // ── Summary totals (replaces renderReports calculations) ──
-  const grossTotal  = state.orders.reduce((sum, o) => sum + (parseFloat(o.total ?? o.amount) || 0), 0);
-  const collected   = state.payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
-  const outstanding = state.customers.reduce((sum, c) => sum + (parseFloat(c.balance) || 0), 0);
+  const grossTotal = sumMoney(state.orders, (o) => o.total ?? o.amount);
+  const collected = sumMoney(state.payments, 'amount');
+  const outstanding = sumMoney(state.customers, 'balance');
 
   // ── Real revenue breakdown, built from actual Delivered orders (no hardcoded numbers) ──
   const { weeklyLabels, weeklyData, monthlyLabels, monthlyData } = useMemo(() => {
@@ -77,7 +78,7 @@ export default function ReportsPage() {
         plugins: { legend: { display: false } },
         scales: {
           x: { grid: { display: false }, ticks: { font: { size: 11 } } },
-          y: { ticks: { font: { size: 11 }, callback: v => '₱' + v.toLocaleString() } },
+          y: { ticks: { font: { size: 11 }, callback: (v) => formatMoney(v) } },
         },
       },
     });
@@ -99,7 +100,7 @@ export default function ReportsPage() {
         c?.fullName ?? '—',
         '#' + o.id,
         o.quantity ?? o.gallons ?? '—',
-        '₱' + (o.total ?? o.amount ?? 0),
+        formatMoney(o.total ?? o.amount ?? 0),
         pay ? pay.method : 'Unpaid',
         o.date || o.createdAt || '—',
         o.status,
@@ -145,15 +146,15 @@ export default function ReportsPage() {
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="agua-card px-5 py-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">Gross total sales</p>
-          <p className="mt-2 font-display text-2xl font-bold text-ink">₱{Math.round(grossTotal).toLocaleString()}</p>
+          <p className="mt-2 font-display text-2xl font-bold text-ink">{formatMoney(grossTotal)}</p>
         </div>
         <div className="agua-card px-5 py-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">Actual collections</p>
-          <p className="mt-2 font-display text-2xl font-bold text-emerald-600">₱{Math.round(collected).toLocaleString()}</p>
+          <p className="mt-2 font-display text-2xl font-bold text-emerald-600">{formatMoney(collected)}</p>
         </div>
         <div className="agua-card px-5 py-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">Outstanding debts</p>
-          <p className="mt-2 font-display text-2xl font-bold text-red-600">₱{Math.round(outstanding).toLocaleString()}</p>
+          <p className="mt-2 font-display text-2xl font-bold text-red-600">{formatMoney(outstanding)}</p>
         </div>
       </div>
 
@@ -217,7 +218,7 @@ export default function ReportsPage() {
                   <td className="px-5 py-3.5 font-semibold text-ink">{customer?.fullName ?? '—'}</td>
                   <td className="px-3 py-3.5 font-mono text-xs text-muted">#{String(o.id).padStart(2, '0')}</td>
                   <td className="px-3 py-3.5 text-muted">{o.quantity ?? o.gallons ?? '—'}</td>
-                  <td className="px-3 py-3.5 font-bold text-ink">₱{o.total ?? o.amount ?? '—'}</td>
+                  <td className="px-3 py-3.5 font-bold text-ink">{formatMoney(o.total ?? o.amount)}</td>
                   <td className="px-3 py-3.5">
                     <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold
                       ${pay ? (methodBadge[pay.method] ?? 'bg-slate-100 text-slate-600') : 'bg-amber-50 text-amber-800'}`}>

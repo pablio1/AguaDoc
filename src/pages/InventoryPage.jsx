@@ -8,16 +8,13 @@ import PageHeader from '../components/admin/PageHeader';
 import SectionCard from '../components/admin/SectionCard';
 import EmptyState from '../components/admin/EmptyState';
 import { TABLE_BODY_ROW, TABLE_HEAD_ROW } from '../components/admin/tableStyles';
+import { formatMoney } from '../lib/money';
 
 const CATEGORY_META = {
   Containers: { icon: Box, iconBg: 'bg-sky-50 text-sky-600' },
   'Water Refill': { icon: Droplets, iconBg: 'bg-blue-50 text-blue-600' },
   Accessories: { icon: Wrench, iconBg: 'bg-amber-50 text-amber-600' },
 };
-
-function formatPeso(n) {
-  return `₱${Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
-}
 
 function formatDateTime(value) {
   if (!value) return '—';
@@ -238,7 +235,7 @@ export default function InventoryPage() {
                         </span>
                       </td>
                       <td className="px-3 py-3.5 text-slate-500">{Number(item.minAlert).toLocaleString()}</td>
-                      <td className="px-3 py-3.5 font-medium text-ink">{formatPeso(item.unitPrice)}</td>
+                      <td className="px-3 py-3.5 font-medium text-ink">{formatMoney(item.unitPrice)}</td>
                       <td className="px-5 py-3.5 text-right">
                         <button
                           type="button"

@@ -8,6 +8,7 @@ import SectionCard from '../components/admin/SectionCard';
 import { TABLE_BODY_ROW, TABLE_HEAD_ROW } from '../components/admin/tableStyles';
 import EmptyState from '../components/admin/EmptyState';
 import { BellRing, ShoppingBag, Users } from 'lucide-react';
+import { formatMoney, sumMoney } from '../lib/money';
 
 const PRICE = 50;
 
@@ -36,12 +37,12 @@ export default function DashboardPage() {
   const canvasRef = useRef(null);
 
   // ── Computed values (replaces renderDashboard() calculations) ──
-  const totalSales    = state.orders
-    .filter(o => o.status === 'Delivered')
-    .reduce((sum, o) => sum + (parseFloat(o.total ?? o.amount) || 0), 0);
+  const totalSales = sumMoney(
+    state.orders.filter((o) => o.status === 'Delivered'),
+    (o) => o.total ?? o.amount
+  );
 
-  const totalDebt     = state.customers
-    .reduce((sum, c) => sum + c.balance, 0);
+  const totalDebt = sumMoney(state.customers, 'balance');
 
   const pendingOrders = state.orders
     .filter(o => o.status === 'Pending').length;
@@ -90,7 +91,7 @@ export default function DashboardPage() {
     .filter(c => c.balance > 0)
     .slice(0, 2)
     .forEach(c =>
-      alerts.push({ type: 'danger', msg: `${c.fullName} has an overdue balance of ₱${c.balance}.` })
+      alerts.push({ type: 'danger', msg: `${c.fullName} has an overdue balance of ${formatMoney(c.balance)}.` })
     );
   if (pendingOrders > 0)
     alerts.push({ type: 'info',   msg: `${pendingOrders} pending order(s) need attention.` });
@@ -161,7 +162,7 @@ export default function DashboardPage() {
         plugins: { legend: { display: false } },
         scales: {
           x: { grid: { display: false }, ticks: { font: { size: 11 } } },
-          y: { ticks: { font: { size: 11 }, callback: v => '₱' + v } },
+          y: { ticks: { font: { size: 11 }, callback: (v) => formatMoney(v) } },
         },
       },
     });
@@ -178,13 +179,13 @@ export default function DashboardPage() {
   const kpiCards = [
     {
       label: 'Total sales (delivered)',
-      value: `₱${totalSales.toLocaleString()}`,
+      value: formatMoney(totalSales),
       badge: `${weekChangePct >= 0 ? '+' : ''}${weekChangePct}% vs last week`,
       badgeClass: weekChangePct >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700',
     },
     {
       label: 'Outstanding debt',
-      value: `₱${totalDebt.toLocaleString()}`,
+      value: formatMoney(totalDebt),
       badge: 'Across walk-in accounts',
       badgeClass: 'bg-red-50 text-red-700',
       valueClass: totalDebt > 0 ? 'text-red-600' : 'text-ink',
@@ -301,7 +302,7 @@ export default function DashboardPage() {
                   <td className="px-5 py-3.5 font-semibold text-slate-400">{i + 1}</td>
                   <td className="px-3 py-3.5 font-semibold text-ink">{c.fullName}</td>
                   <td className="px-3 py-3.5 text-muted">{c.ordersCount}</td>
-                  <td className="px-5 py-3.5 font-bold text-emerald-600">₱{c.totalPaid.toLocaleString()}</td>
+                  <td className="px-5 py-3.5 font-bold text-emerald-600">{formatMoney(c.totalPaid)}</td>
                 </tr>
               ))}
             </tbody>
@@ -339,7 +340,7 @@ export default function DashboardPage() {
                   <tr key={o.id} className={TABLE_BODY_ROW}>
                     <td className="px-5 py-3.5 font-semibold text-ink">{customer?.fullName || '—'}</td>
                     <td className="px-3 py-3.5 text-muted">{o.quantity ?? o.gallons ?? '—'}</td>
-                    <td className="px-3 py-3.5 font-bold text-ink">₱{o.total ?? o.amount ?? '—'}</td>
+                    <td className="px-3 py-3.5 font-bold text-ink">{formatMoney(o.total ?? o.amount)}</td>
                     <td className="px-5 py-3.5">
                       <span
                         className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${

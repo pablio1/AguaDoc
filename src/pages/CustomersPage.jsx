@@ -15,6 +15,7 @@ import FilterPills from '../components/admin/FilterPills';
 import { TABLE_BODY_ROW, TABLE_HEAD_ROW } from '../components/admin/tableStyles';
 import EmptyState from '../components/admin/EmptyState';
 import { Users } from 'lucide-react';
+import { formatMoney, sumMoney } from '../lib/money';
 
 const PRICE_PER_GALLON = 40; // walk-ins pick up in person — no delivery fee added
 
@@ -29,8 +30,8 @@ export default function CustomersPage() {
   const [editForm, setEditForm]           = useState({ name: '', phone: '', addr: '', orders: '', agreementSigned: false });
 
   // Replaces filterCustomers()
-  const totalDebt = state.customers.reduce((sum, c) => sum + (Number(c.balance) || 0), 0);
-  const debtorCount = state.customers.filter((c) => c.balance > 0).length;
+  const totalDebt = sumMoney(state.customers, 'balance');
+  const debtorCount = state.customers.filter((c) => Number(c.balance) > 0).length;
 
   const filtered = state.customers.filter(c => {
     if (filter === 'Debtors') return c.balance > 0;
@@ -124,7 +125,7 @@ export default function CustomersPage() {
         </div>
         <div className="agua-card px-5 py-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">Total outstanding</p>
-          <p className="mt-2 font-display text-2xl font-bold text-red-600">₱{totalDebt.toLocaleString()}</p>
+          <p className="mt-2 font-display text-2xl font-bold text-red-600">{formatMoney(totalDebt)}</p>
         </div>
       </div>
 
@@ -153,8 +154,8 @@ export default function CustomersPage() {
                   <p className="mt-0.5 max-w-[200px] truncate text-[11px] text-muted">{c.address}</p>
                 </td>
                 <td className="px-3 py-3.5 text-muted">{c.phone}</td>
-                <td className={`px-3 py-3.5 font-bold ${c.balance > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                  ₱{Number(c.balance || 0).toLocaleString()}
+                <td className={`px-3 py-3.5 font-bold ${Number(c.balance) > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                  {formatMoney(c.balance)}
                 </td>
                 <td className="px-3 py-3.5">
                   {c.balance > 0 ? (
@@ -317,7 +318,7 @@ export default function CustomersPage() {
                 placeholder="0"
               />
               <p className="mt-1.5 text-[11px] text-muted">
-                = ₱{(Number(editForm.orders) || 0) * PRICE_PER_GALLON} balance (₱{PRICE_PER_GALLON}/gallon, no delivery fee for walk-ins).
+                = {formatMoney((Number(editForm.orders) || 0) * PRICE_PER_GALLON)} balance ({formatMoney(PRICE_PER_GALLON)}/gallon, no delivery fee for walk-ins).
                 Recording an actual payment on the Payments page reduces this automatically instead.
               </p>
             </div>

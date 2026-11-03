@@ -16,6 +16,7 @@ import {
   apiGetRiderRoute,
 } from '../api';
 import { CARTO_ATTRIBUTION, cartoDarkUrl, cartoVoyagerUrl } from '../lib/mapTiles';
+import { formatMoney } from '../lib/money';
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -801,7 +802,7 @@ export default function RiderDashboard({ user, onLogout }) {
                           )}
                         </div>
                         <p className="mt-0.5 truncate text-xs text-white/55">
-                          {order.customerName || 'Customer'} · {order.quantity} gal · ₱{Number(order.total || 0).toFixed(2)}
+                          {order.customerName || 'Customer'} · {order.quantity} gal · {formatMoney(order.total)}
                         </p>
                         <p className="mt-1 flex items-start gap-1 text-xs text-white/40">
                           <MapPin size={12} className="mt-0.5 shrink-0" />

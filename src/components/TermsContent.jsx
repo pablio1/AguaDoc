@@ -158,7 +158,7 @@ export function printAgreement(customer) {
   const today = new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
   const balance = Number(customer.balance) || 0;
   const amountLine = balance > 0
-    ? `₱${balance.toFixed(2)} (${esc(customer.orders ?? 0)} gallon/s)`
+    ? `₱${balance.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${esc(customer.orders ?? 0)} gallon/s)`
     : '₱ ____________  (to be filled in when credit is given)';
   const sections = getTermsSections()
     .map((s, i) => `<h3>${i + 1}. ${esc(s.title)}</h3><p>${esc(s.body)}</p>`)

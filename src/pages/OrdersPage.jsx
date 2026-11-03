@@ -10,6 +10,7 @@ import FilterPills from '../components/admin/FilterPills';
 import { TABLE_BODY_ROW, TABLE_HEAD_ROW } from '../components/admin/tableStyles';
 import EmptyState from '../components/admin/EmptyState';
 import { ClipboardList, MapPin, Trash2 } from 'lucide-react';
+import { formatMoney } from '../lib/money';
 
 const PRICE = 40;
 
@@ -276,7 +277,7 @@ export default function OrdersPage() {
                     </span>
                   </td>
                   <td className="px-3 py-3.5 text-muted">{o.quantity ?? o.gallons ?? '—'}</td>
-                  <td className="px-3 py-3.5 font-bold text-ink">₱{o.total ?? o.amount ?? '—'}</td>
+                  <td className="px-3 py-3.5 font-bold text-ink">{formatMoney(o.total ?? o.amount)}</td>
                   <td className="px-3 py-3.5">
                     {o.paymentStatus === 'paid' ? (
                       <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
@@ -427,7 +428,7 @@ export default function OrdersPage() {
           </div>
           <div className="my-2 flex justify-between rounded-xl border border-blue-100 bg-blue-50/80 px-3.5 py-2.5 text-sm font-bold text-ink">
             <span className="text-muted">Total amount</span>
-            <span>₱{form.gallons * PRICE}</span>
+            <span>{formatMoney(form.gallons * PRICE)}</span>
           </div>
           <div className="mt-4 flex justify-end gap-2">
             <button

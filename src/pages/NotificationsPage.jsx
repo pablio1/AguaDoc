@@ -7,6 +7,7 @@ import PageHeader from '../components/admin/PageHeader';
 import SectionCard from '../components/admin/SectionCard';
 import EmptyState from '../components/admin/EmptyState';
 import { Bell } from 'lucide-react';
+import { formatMoney } from '../lib/money';
 
 const TABS = ['all', 'unread'];
 
@@ -49,7 +50,7 @@ export default function NotificationsPage() {
   );
   const firstDebtor = debtors[0];
   const smsPreview  = firstDebtor
-    ? smsTemplate.replace('[Name]', firstDebtor.fullName).replace('[Amount]', '₱' + firstDebtor.balance)
+    ? smsTemplate.replace('[Name]', firstDebtor.fullName).replace('[Amount]', formatMoney(firstDebtor.balance))
     : 'No customers with balance.';
 
   async function handleMarkRead(n) {
@@ -167,7 +168,7 @@ export default function NotificationsPage() {
               {debtors.map((c) => (
                 <li key={c.id} className="flex items-center justify-between px-3 py-2.5 text-sm">
                   <span className="font-medium text-ink">{c.fullName}</span>
-                  <span className="font-bold text-red-600">₱{c.balance}</span>
+                  <span className="font-bold text-red-600">{formatMoney(c.balance)}</span>
                 </li>
               ))}
             </ul>

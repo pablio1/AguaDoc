@@ -14,6 +14,7 @@ import {
 import RequestServicePage from './RequestServicePage';
 import { TermsModal, TermsGate, TERMS_VERSION } from '../components/TermsContent';
 import { CARTO_ATTRIBUTION, cartoVoyagerUrl } from '../lib/mapTiles';
+import { formatMoney } from '../lib/money';
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -626,7 +627,7 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="font-display text-lg font-bold text-accent2">₱{order.total}</p>
+                          <p className="font-display text-lg font-bold text-accent2">{formatMoney(order.total)}</p>
                           <p className="text-xs text-gray-400 mt-0.5">
                             {isWalkin ? 'Pay on arrival' : order.payMethod || 'Online payment'}
                           </p>

@@ -9,6 +9,7 @@ import SectionCard from '../components/admin/SectionCard';
 import { TABLE_BODY_ROW, TABLE_HEAD_ROW } from '../components/admin/tableStyles';
 import EmptyState from '../components/admin/EmptyState';
 import { CreditCard, Wallet } from 'lucide-react';
+import { formatMoney, sumMoney } from '../lib/money';
 
 export default function PaymentsPage() {
   const { state, dispatch } = useApp();
@@ -16,9 +17,9 @@ export default function PaymentsPage() {
   const [form, setForm] = useState({ custId: '', method: 'Cash', amount: '' });
 
   // ── Summary calculations ──
-const totalCollected = state.payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
-const totalDebt      = state.customers.reduce((sum, c) => sum + (parseFloat(c.balance) || 0), 0);
-const debtorCount    = state.customers.filter(c => parseFloat(c.balance) > 0).length;
+  const totalCollected = sumMoney(state.payments, 'amount');
+  const totalDebt = sumMoney(state.customers, 'balance');
+  const debtorCount = state.customers.filter((c) => Number(c.balance) > 0).length;
 
   // ── Unpaid customers sorted by balance ──
   const unpaidCustomers = [...state.customers]
@@ -55,7 +56,7 @@ const debtorCount    = state.customers.filter(c => parseFloat(c.balance) > 0).le
 
       // A "Payment received" notification is created automatically on the backend
       // (only reaches the customer's own dashboard if this customer has a linked account).
-      showToast(`✅ Payment of ₱${amount} recorded!`);
+      showToast(`✅ Payment of ${formatMoney(amount)} recorded!`);
       setForm({ custId: '', method: 'Cash', amount: '' });
       setShowModal(false);
     } catch {
@@ -85,12 +86,12 @@ const debtorCount    = state.customers.filter(c => parseFloat(c.balance) > 0).le
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="agua-card px-5 py-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">Total collected</p>
-          <p className="mt-2 font-display text-2xl font-bold text-emerald-600">₱{totalCollected.toFixed(2)}</p>
+          <p className="mt-2 font-display text-2xl font-bold text-emerald-600">{formatMoney(totalCollected)}</p>
           <p className="mt-1 text-xs text-muted">{state.payments.length} transactions logged</p>
         </div>
         <div className="agua-card px-5 py-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">Outstanding debt</p>
-          <p className="mt-2 font-display text-2xl font-bold text-red-600">₱{totalDebt.toFixed(2)}</p>
+          <p className="mt-2 font-display text-2xl font-bold text-red-600">{formatMoney(totalDebt)}</p>
           <p className="mt-1 text-xs text-muted">{debtorCount} customer{debtorCount === 1 ? '' : 's'} with balance</p>
         </div>
       </div>
@@ -121,7 +122,7 @@ const debtorCount    = state.customers.filter(c => parseFloat(c.balance) > 0).le
                   <tr key={c.id} className={TABLE_BODY_ROW}>
                     <td className="px-5 py-3.5 font-semibold text-ink">{c.fullName}</td>
                     <td className="px-3 py-3.5 text-muted">{c.phone}</td>
-                    <td className="px-5 py-3.5 text-right font-bold text-red-600">₱{c.balance}</td>
+                    <td className="px-5 py-3.5 text-right font-bold text-red-600">{formatMoney(c.balance)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -165,7 +166,7 @@ const debtorCount    = state.customers.filter(c => parseFloat(c.balance) > 0).le
                     <tr key={p.id} className={TABLE_BODY_ROW}>
                       <td className="whitespace-nowrap px-5 py-3.5 text-muted">{p.date || '—'}</td>
                       <td className="px-3 py-3.5 font-semibold text-ink">{custName}</td>
-                      <td className="px-3 py-3.5 font-bold text-emerald-600">₱{parseFloat(p.amount).toFixed(2)}</td>
+                      <td className="px-3 py-3.5 font-bold text-emerald-600">{formatMoney(p.amount)}</td>
                       <td className="px-3 py-3.5">
                         <span
                           className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${methodBadge[p.method] || 'bg-slate-100 text-slate-600'}`}

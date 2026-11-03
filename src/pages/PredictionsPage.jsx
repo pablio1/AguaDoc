@@ -7,6 +7,7 @@ import SectionCard from '../components/admin/SectionCard';
 import { TABLE_BODY_ROW, TABLE_HEAD_ROW } from '../components/admin/tableStyles';
 import EmptyState from '../components/admin/EmptyState';
 import { Users } from 'lucide-react';
+import { formatMoney } from '../lib/money';
 
 const HISTORY_DAYS = 14; // how many past days feed the trend line
 const FORECAST_DAYS = 7; // how many days ahead we project
@@ -123,7 +124,7 @@ export default function PredictionsPage() {
         plugins: { legend: { display: false } },
         scales: {
           x: { grid: { display: false }, ticks: { font: { size: 9 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 7 } },
-          y: { ticks: { font: { size: 10 }, callback: v => '₱' + v } },
+          y: { ticks: { font: { size: 10 }, callback: (v) => formatMoney(v) } },
         },
       },
     });
@@ -139,9 +140,9 @@ export default function PredictionsPage() {
 
       <div className="grid gap-3 sm:grid-cols-3">
         {[
-          { label: 'Predicted today', value: `₱${predToday}`, note: 'Average of last 7 actual days' },
-          { label: 'Predicted this week', value: `₱${predWeek}`, note: 'Trend line projected 7 days ahead' },
-          { label: 'Predicted this month', value: `₱${predMonth}`, note: 'Weekly forecast scaled to 30 days' },
+          { label: 'Predicted today', value: formatMoney(predToday), note: 'Average of last 7 actual days' },
+          { label: 'Predicted this week', value: formatMoney(predWeek), note: 'Trend line projected 7 days ahead' },
+          { label: 'Predicted this month', value: formatMoney(predMonth), note: 'Weekly forecast scaled to 30 days' },
         ].map((p) => (
           <div key={p.label} className="agua-card px-5 py-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">{p.label}</p>
@@ -193,8 +194,8 @@ export default function PredictionsPage() {
             {riskData.map((c) => (
               <tr key={c.id} className={TABLE_BODY_ROW}>
                 <td className="px-5 py-3.5 font-semibold text-ink">{c.fullName}</td>
-                <td className={`px-3 py-3.5 font-bold ${c.balance > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                  ₱{c.balance}
+                <td className={`px-3 py-3.5 font-bold ${Number(c.balance) > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                  {formatMoney(c.balance)}
                 </td>
                 <td className="px-3 py-3.5">
                   <div className="mb-0.5 h-1.5 w-full max-w-[140px] rounded-full" style={{ background: c.bgColor }}>

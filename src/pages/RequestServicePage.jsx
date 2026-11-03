@@ -10,6 +10,7 @@ import 'leaflet/dist/leaflet.css';
 import { apiAddOrder, apiCreateCheckout, apiGeocode, apiReverseGeocode } from '../api';
 import { TermsModal } from '../components/TermsContent';
 import { CARTO_ATTRIBUTION, cartoVoyagerUrl } from '../lib/mapTiles';
+import { formatMoney } from '../lib/money';
 
 const PRICE_PER_GALLON = 40;
 const DELIVERY_FEE     = 20;
@@ -383,7 +384,7 @@ export default function RequestServicePage({ user, onOrderPlaced }) {
         <div className="agua-card mb-6 min-w-[260px] space-y-2 px-8 py-5 text-left text-sm">
           <div className="flex justify-between"><span className="text-muted">Type</span><span className="font-semibold">{isWalkin ? 'Walk-in / Pickup' : 'Delivery (Cash on Delivery)'}</span></div>
           <div className="flex justify-between"><span className="text-muted">Gallons</span><span className="font-semibold">{quantity}</span></div>
-          <div className="flex justify-between"><span className="text-muted">Total</span><span className="font-bold text-accent2">₱{total.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span className="text-muted">Total</span><span className="font-bold text-accent2">{formatMoney(total)}</span></div>
         </div>
         <button
           type="button"
@@ -427,7 +428,7 @@ export default function RequestServicePage({ user, onOrderPlaced }) {
               <OrderTypeCard
                 icon={Truck}
                 title="Delivery"
-                subtitle={`+ ₱${DELIVERY_FEE}.00`}
+                subtitle={`+ ${formatMoney(DELIVERY_FEE)}`}
                 selected={orderType === 'delivery'}
                 onClick={() => { setOrderType('delivery'); setError(''); setPinReady(false); }}
               />
@@ -543,17 +544,17 @@ export default function RequestServicePage({ user, onOrderPlaced }) {
               <div className="space-y-1.5 text-sm">
                 <div className="flex justify-between text-muted">
                   <span>Gallons ({quantity})</span>
-                  <span>₱{subtotal.toFixed(2)}</span>
+                  <span>{formatMoney(subtotal)}</span>
                 </div>
                 {isDelivery && (
                   <div className="flex justify-between text-muted">
                     <span>Delivery fee</span>
-                    <span>₱{deliveryFee.toFixed(2)}</span>
+                    <span>{formatMoney(deliveryFee)}</span>
                   </div>
                 )}
                 <div className="flex justify-between border-t border-slate-200 pt-2 font-bold text-ink">
                   <span>Total</span>
-                  <span className="text-accent2">₱{total.toFixed(2)}</span>
+                  <span className="text-accent2">{formatMoney(total)}</span>
                 </div>
               </div>
             </SummaryBlock>
@@ -588,10 +589,10 @@ export default function RequestServicePage({ user, onOrderPlaced }) {
             <SummaryBlock>
               <div className="space-y-1.5 text-sm">
                 <div className="flex justify-between text-muted">
-                  <span>Gallons ({quantity})</span><span>₱{subtotal.toFixed(2)}</span>
+                  <span>Gallons ({quantity})</span><span>{formatMoney(subtotal)}</span>
                 </div>
                 <div className="flex justify-between text-muted">
-                  <span>Delivery fee</span><span>₱{deliveryFee.toFixed(2)}</span>
+                  <span>Delivery fee</span><span>{formatMoney(deliveryFee)}</span>
                 </div>
                 <div className="flex justify-between gap-3 text-muted">
                   <span className="shrink-0">Address</span>
@@ -603,7 +604,7 @@ export default function RequestServicePage({ user, onOrderPlaced }) {
                 </div>
                 <div className="flex justify-between border-t border-slate-200 pt-2 font-bold text-ink">
                   <span>Total</span>
-                  <span className="text-accent2">₱{total.toFixed(2)}</span>
+                  <span className="text-accent2">{formatMoney(total)}</span>
                 </div>
               </div>
             </SummaryBlock>
@@ -653,7 +654,7 @@ export default function RequestServicePage({ user, onOrderPlaced }) {
                 </div>
               ) : (
                 <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 p-4 text-center">
-                  <p className="text-sm text-muted">Have <span className="font-bold text-ink">₱{total.toFixed(2)}</span> ready in cash for the rider when your order arrives.</p>
+                  <p className="text-sm text-muted">Have <span className="font-bold text-ink">{formatMoney(total)}</span> ready in cash for the rider when your order arrives.</p>
                 </div>
               )}
             </div>
