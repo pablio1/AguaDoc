@@ -2,6 +2,9 @@
 import { useEffect, useRef, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { Chart } from 'chart.js/auto';
+import PageHeader from '../components/admin/PageHeader';
+import SectionCard from '../components/admin/SectionCard';
+import { TABLE_BODY_ROW, TABLE_HEAD_ROW } from '../components/admin/tableStyles';
 
 const HISTORY_DAYS = 14; // how many past days feed the trend line
 const FORECAST_DAYS = 7; // how many days ahead we project
@@ -109,8 +112,8 @@ export default function PredictionsPage() {
       data: {
         labels,
         datasets: [
-          { label: 'Actual', data: actualSeries, borderColor: '#1eb8c8', tension: 0.3, borderWidth: 2, pointRadius: 2, spanGaps: false },
-          { label: 'Predicted', data: predictedSeries, borderColor: '#f59e0b', borderDash: [5, 4], tension: 0.3, borderWidth: 2, pointRadius: 2, spanGaps: false },
+          { label: 'Actual', data: actualSeries, borderColor: '#3B82F6', backgroundColor: 'rgba(59,130,246,.06)', tension: 0.3, borderWidth: 2, pointRadius: 2, spanGaps: false },
+          { label: 'Predicted', data: predictedSeries, borderColor: '#94a3b8', borderDash: [5, 4], tension: 0.3, borderWidth: 2, pointRadius: 2, spanGaps: false },
         ],
       },
       options: {
@@ -126,72 +129,76 @@ export default function PredictionsPage() {
   }, [actualDays, actualTotals, predictedTotals]);
 
   return (
-    <div>
+    <div className="space-y-5">
+      <PageHeader
+        title="Predictions"
+        subtitle={`Forecasts from the last ${HISTORY_DAYS} days of delivered orders (moving average + trend line).`}
+      />
 
-      {/* Sales Prediction Card */}
-      <div className="agua-card p-4 mb-3.5">
-        <div className="text-[15px] font-bold">📈 Sales Prediction</div>
-        <div className="text-xs text-gray-500 mt-0.5 mb-3">
-          Forecast based on your last {HISTORY_DAYS} days of actual delivered orders (moving average + trend line) — not a trained ML model.
-        </div>
-
-        {/* 3 prediction values */}
-        <div className="grid grid-cols-3 gap-3 mb-3.5">
+      <SectionCard title="Sales forecast" description="Actual history vs. projected trend" bodyClassName="px-5 pb-5 pt-2">
+        <div className="mb-4 grid gap-3 sm:grid-cols-3">
           {[
-            { label: 'Predicted Today',      value: `₱${predToday}`, note: 'Average of last 7 actual days' },
-            { label: 'Predicted This Week',   value: `₱${predWeek}`,  note: 'Trend line projected 7 days ahead' },
-            { label: 'Predicted This Month',  value: `₱${predMonth}`, note: 'Weekly forecast scaled to 30 days' },
-          ].map(p => (
-            <div key={p.label} className="bg-gray-50 rounded-xl p-3.5">
-              <div className="text-[11.5px] text-gray-500 font-semibold uppercase tracking-wide mb-1">{p.label}</div>
-              <div className="text-[20px] font-black text-gray-800">{p.value}</div>
-              <div className="text-xs text-gray-400 mt-0.5">{p.note}</div>
+            { label: 'Predicted today', value: `₱${predToday}`, note: 'Average of last 7 actual days' },
+            { label: 'Predicted this week', value: `₱${predWeek}`, note: 'Trend line projected 7 days ahead' },
+            { label: 'Predicted this month', value: `₱${predMonth}`, note: 'Weekly forecast scaled to 30 days' },
+          ].map((p) => (
+            <div key={p.label} className="rounded-xl border border-slate-100 bg-slate-50/60 px-4 py-3.5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">{p.label}</p>
+              <p className="mt-1 font-display text-xl font-bold text-ink">{p.value}</p>
+              <p className="mt-0.5 text-xs text-muted">{p.note}</p>
             </div>
           ))}
         </div>
 
-        {/* Chart */}
-        <div className="relative h-[180px]">
+        <div className="relative h-[200px]">
           <canvas ref={canvasRef} />
         </div>
-        <div className="flex gap-4 mt-2 text-xs text-gray-500">
-          <span><span className="inline-block w-2.5 h-2.5 rounded-sm bg-accent mr-1" />Actual Sales</span>
-          <span><span className="inline-block w-2.5 h-2.5 rounded-sm bg-yellow-400 mr-1" />Predicted</span>
+        <div className="mt-3 flex gap-5 text-xs text-muted">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block h-2.5 w-2.5 rounded-sm bg-blue-500" />
+            Actual
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block h-2.5 w-2.5 rounded-sm border border-dashed border-slate-400 bg-slate-200" />
+            Predicted
+          </span>
         </div>
-      </div>
+      </SectionCard>
 
-      {/* Debt Risk Table */}
-      <div className="agua-card p-4">
-        <div className="text-[15px] font-bold">⚠ Debt Risk Prediction</div>
-        <div className="text-xs text-gray-500 mt-0.5 mb-3">Customers likely to default on payment</div>
-        <table className="w-full text-[13px] border-collapse">
+      <SectionCard title="Debt risk" description="Walk-in customers ranked by balance-based risk score" bodyClassName="overflow-x-auto">
+        <table className="w-full min-w-[480px] text-sm">
           <thead>
-            <tr>
-              {['Customer','Balance','Risk Score','Risk Level'].map(h => (
-                <th key={h} className="text-left px-2 py-1.5 text-[11.5px] font-semibold text-gray-500 border-b-2 border-gray-100">{h}</th>
+            <tr className={TABLE_HEAD_ROW}>
+              {['Customer', 'Balance', 'Risk score', 'Risk level'].map((h) => (
+                <th key={h} className={`px-3 py-3 ${h === 'Customer' ? 'pl-5' : ''}`}>
+                  {h}
+                </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {riskData.map(c => (
-              <tr key={c.id} className="hover:bg-gray-50 border-b border-gray-100 last:border-b-0">
-                <td className="px-2 py-2.5 font-medium">{c.fullName}</td>
-                <td className={`px-2 py-2.5 font-bold ${c.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>₱{c.balance}</td>
-                <td className="px-2 py-2.5">
-                  <div className="rounded h-1.5 w-full mb-0.5" style={{ background: c.bgColor }}>
-                    <div className="h-1.5 rounded" style={{ width: `${c.score}%`, background: c.barColor }} />
-                  </div>
-                  <small className="text-gray-400 text-[11px]">{c.score}%</small>
+            {riskData.map((c) => (
+              <tr key={c.id} className={TABLE_BODY_ROW}>
+                <td className="px-5 py-3.5 font-semibold text-ink">{c.fullName}</td>
+                <td className={`px-3 py-3.5 font-bold ${c.balance > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                  ₱{c.balance}
                 </td>
-                <td className="px-2 py-2.5">
-                  <span className={`inline-flex px-2 py-0.5 rounded-full text-[11.5px] font-semibold ${c.badgeStyle}`}>{c.risk}</span>
+                <td className="px-3 py-3.5">
+                  <div className="mb-0.5 h-1.5 w-full max-w-[140px] rounded-full" style={{ background: c.bgColor }}>
+                    <div className="h-1.5 rounded-full" style={{ width: `${c.score}%`, background: c.barColor }} />
+                  </div>
+                  <span className="text-[11px] text-muted">{c.score}%</span>
+                </td>
+                <td className="px-3 py-3.5">
+                  <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${c.badgeStyle}`}>
+                    {c.risk}
+                  </span>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
-
+      </SectionCard>
     </div>
   );
 }

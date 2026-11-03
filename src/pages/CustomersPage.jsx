@@ -3,15 +3,21 @@
 // Registered app customers aren't added here — their debt tracking can be wired up later
 // via apiGetAvailableCustomers() / apiLinkCustomer() in api.js if that's ever needed.
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import Modal from '../components/ui/Modal';
 import { showToast } from '../components/ui/Toast';
 import { apiAddCustomer, apiUpdateCustomer } from '../api';
 import { printAgreement } from '../components/TermsContent';
+import PageHeader from '../components/admin/PageHeader';
+import SectionCard from '../components/admin/SectionCard';
+import FilterPills from '../components/admin/FilterPills';
+import { TABLE_BODY_ROW, TABLE_HEAD_ROW } from '../components/admin/tableStyles';
 
 const PRICE_PER_GALLON = 40; // walk-ins pick up in person — no delivery fee added
 
 export default function CustomersPage() {
+  const navigate = useNavigate();
   const { state, dispatch } = useApp();
   const [showAddModal, setShowAddModal]   = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null); // customer object being edited, or null
@@ -92,105 +98,115 @@ export default function CustomersPage() {
   }
 
   return (
-    <div>
-      {/* Header */}
-      <div className="flex justify-between items-center mb-4">
-        <h1 className="text-xl font-bold">👥 Customers & Debt</h1>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="bg-accent text-white px-4 py-2 rounded-lg text-[12.5px] font-semibold hover:bg-accent2 transition"
-        >
-          + New Customer
+    <div className="space-y-5">
+      <PageHeader
+        title="Debt Management (Utang Tracker)"
+        subtitle="Track customer outstanding balances, settle accounts, and manage walk-in credit."
+      >
+        <button type="button" onClick={() => setShowAddModal(true)} className="agua-btn agua-btn-primary !py-2 !text-xs">
+          New customer
         </button>
-      </div>
+      </PageHeader>
 
-      {/* Filter Tabs */}
-      <div className="flex gap-2 mb-3">
-        {['All', 'Debtors', 'Cleared'].map(tab => (
-          <button
-            key={tab}
-            onClick={() => setFilter(tab)}
-            className={`px-3 py-1 rounded-full text-xs font-semibold border transition cursor-pointer
-              ${filter === tab
-                ? 'bg-accent text-white border-accent'
-                : 'bg-white text-gray-500 border-gray-200 hover:border-accent hover:text-accent'}`}
-          >
-            {tab}
-          </button>
-        ))}
-      </div>
+      <FilterPills options={['All', 'Debtors', 'Cleared']} value={filter} onChange={setFilter} className="!mb-0" />
 
-      {/* Table */}
-      <div className="agua-card max-h-[520px] overflow-y-auto">
-        <table className="w-full text-[13px] border-collapse">
-          <thead className="sticky top-0 bg-white z-10">
-            <tr>
-              {['Name', 'Phone', 'Address', 'Balance', 'Orders', 'Agreement', 'Actions'].map(h => (
-                <th key={h} className="text-left px-3 py-2.5 text-[11.5px] font-semibold text-gray-500 border-b-2 border-gray-200">
+      <SectionCard
+        title="Active Debt Customers"
+        description={`${filtered.length} account${filtered.length === 1 ? '' : 's'} · filter: ${filter}`}
+        bodyClassName="max-h-[560px] overflow-auto"
+      >
+        <table className="w-full min-w-[780px] text-sm">
+          <thead className="sticky top-0 z-10 bg-white">
+            <tr className={TABLE_HEAD_ROW}>
+              {['Customer Name', 'Contact Number', 'Total Outstanding Balance', 'Status', 'Agreement', 'Actions'].map((h) => (
+                <th key={h} className={`px-3 py-3 ${h === 'Customer Name' ? 'pl-5' : ''} ${h === 'Actions' ? 'pr-5 text-right' : ''}`}>
                   {h}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {filtered.map(c => (
-              <tr key={c.id} className="hover:bg-gray-50 border-b border-gray-100 last:border-b-0">
-                <td className="px-3 py-2.5 font-medium">{c.fullName}</td>
-                <td className="px-3 py-2.5 text-gray-500">{c.phone}</td>
-                <td className="px-3 py-2.5 text-gray-500">{c.address}</td>
-                <td className={`px-3 py-2.5 font-bold ${c.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  ₱{c.balance}
+            {filtered.map((c) => (
+              <tr key={c.id} className={TABLE_BODY_ROW}>
+                <td className="px-5 py-3.5">
+                  <p className="font-semibold text-ink">{c.fullName}</p>
+                  <p className="mt-0.5 max-w-[200px] truncate text-[11px] text-muted">{c.address}</p>
                 </td>
-                <td className="px-3 py-2.5 text-gray-500">{c.orders}</td>
-                <td className="px-3 py-2.5">
-                  {c.agreementSignedAt ? (
-                    <span className="inline-flex px-2 py-0.5 rounded-full text-[11.5px] font-semibold bg-green-100 text-green-800 whitespace-nowrap">
-                      ✔ Signed
+                <td className="px-3 py-3.5 text-muted">{c.phone}</td>
+                <td className={`px-3 py-3.5 font-bold ${c.balance > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                  ₱{Number(c.balance || 0).toLocaleString()}
+                </td>
+                <td className="px-3 py-3.5">
+                  {c.balance > 0 ? (
+                    <span className="inline-flex rounded-full bg-red-50 px-2.5 py-0.5 text-[11px] font-semibold text-red-700">
+                      Overdue Balance
                     </span>
                   ) : (
-                    <span className="inline-flex px-2 py-0.5 rounded-full text-[11.5px] font-semibold bg-yellow-100 text-yellow-800 whitespace-nowrap">
-                      ⚠ Not signed
+                    <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
+                      Cleared
                     </span>
                   )}
                 </td>
-                <td className="px-3 py-2.5 whitespace-nowrap">
+                <td className="px-3 py-3.5">
+                  {c.agreementSignedAt ? (
+                    <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
+                      Signed
+                    </span>
+                  ) : (
+                    <span className="inline-flex rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800">
+                      Not signed
+                    </span>
+                  )}
+                </td>
+                <td className="whitespace-nowrap px-5 py-3.5 text-right">
+                  {c.balance > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => navigate('/payments')}
+                      className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
+                    >
+                      Settle Payment
+                    </button>
+                  )}
                   <button
+                    type="button"
                     onClick={() => openEdit(c)}
-                    className="border border-gray-200 rounded px-2 py-1 text-xs hover:bg-gray-50"
+                    className={`${c.balance > 0 ? 'ml-3' : ''} text-xs font-semibold text-slate-600 hover:text-ink`}
                   >
-                    ✏ Edit
+                    Edit
                   </button>
                   <button
+                    type="button"
                     onClick={() => printAgreement(c)}
                     title="Print the credit agreement for this customer to sign"
-                    className="border border-gray-200 rounded px-2 py-1 text-xs hover:bg-gray-50 ml-1.5"
+                    className="ml-3 text-xs font-semibold text-blue-600 hover:text-blue-700"
                   >
-                    🖨 Agreement
+                    Agreement
                   </button>
                 </td>
               </tr>
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-3 py-6 text-center text-gray-400">
-                  No walk-in customers yet — click "+ New Customer" to add one.
+                <td colSpan={6} className="px-5 py-10 text-center text-sm text-muted">
+                  No walk-in customers yet — add one with New customer.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
-      </div>
+      </SectionCard>
 
       {/* Modal: add new walk-in */}
       {showAddModal && (
-        <Modal title="👤 Register New Customer" onClose={() => setShowAddModal(false)}>
+        <Modal title="Register new customer" onClose={() => setShowAddModal(false)}>
           <div className="space-y-3">
             <div>
               <label className="text-[12.5px] font-semibold text-gray-600">Full Name</label>
               <input
                 value={form.name}
                 onChange={e => setForm({ ...form, name: e.target.value })}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] mt-1"
+                className="agua-input mt-1"
                 placeholder="e.g. Juan Dela Cruz"
               />
             </div>
@@ -199,7 +215,7 @@ export default function CustomersPage() {
               <input
                 value={form.phone}
                 onChange={e => setForm({ ...form, phone: e.target.value })}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] mt-1"
+                className="agua-input mt-1"
                 placeholder="09123456789"
               />
             </div>
@@ -208,7 +224,7 @@ export default function CustomersPage() {
               <input
                 value={form.addr}
                 onChange={e => setForm({ ...form, addr: e.target.value })}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] mt-1"
+                className="agua-input mt-1"
                 placeholder="e.g. Liloan, Cebu"
               />
             </div>
@@ -216,17 +232,19 @@ export default function CustomersPage() {
 
           <div className="flex justify-end gap-2 mt-5">
             <button
+              type="button"
               onClick={() => setShowAddModal(false)}
-              className="px-4 py-2 border border-gray-200 rounded-lg text-[12.5px] font-semibold hover:bg-gray-50"
+              className="rounded-xl border border-slate-200 px-4 py-2 text-[12.5px] font-semibold text-ink hover:bg-slate-50"
             >
               Cancel
             </button>
             <button
+              type="button"
               onClick={handleAddCustomer}
               disabled={saving}
-              className="px-4 py-2 bg-accent text-white rounded-lg text-[12.5px] font-semibold hover:bg-accent2 disabled:opacity-50"
+              className="agua-btn agua-btn-primary !py-2 disabled:opacity-50"
             >
-              {saving ? 'Saving...' : '💾 Save Customer'}
+              {saving ? 'Saving…' : 'Save customer'}
             </button>
           </div>
         </Modal>
@@ -234,14 +252,14 @@ export default function CustomersPage() {
 
       {/* Modal: edit existing customer, including balance */}
       {editingCustomer && (
-        <Modal title={`✏ Edit ${editingCustomer.fullName}`} onClose={() => setEditingCustomer(null)}>
+        <Modal title={`Edit ${editingCustomer.fullName}`} onClose={() => setEditingCustomer(null)}>
           <div className="space-y-3">
             <div>
               <label className="text-[12.5px] font-semibold text-gray-600">Full Name</label>
               <input
                 value={editForm.name}
                 onChange={e => setEditForm({ ...editForm, name: e.target.value })}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] mt-1"
+                className="agua-input mt-1"
               />
             </div>
             <div>
@@ -249,7 +267,7 @@ export default function CustomersPage() {
               <input
                 value={editForm.phone}
                 onChange={e => setEditForm({ ...editForm, phone: e.target.value })}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] mt-1"
+                className="agua-input mt-1"
               />
             </div>
             <div>
@@ -257,7 +275,7 @@ export default function CustomersPage() {
               <input
                 value={editForm.addr}
                 onChange={e => setEditForm({ ...editForm, addr: e.target.value })}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] mt-1"
+                className="agua-input mt-1"
               />
             </div>
             <div>
@@ -267,7 +285,7 @@ export default function CustomersPage() {
                 min="0"
                 value={editForm.orders}
                 onChange={e => setEditForm({ ...editForm, orders: e.target.value })}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] mt-1"
+                className="agua-input mt-1"
                 placeholder="0"
               />
               <p className="text-[11px] text-gray-400 mt-1.5">
@@ -295,17 +313,19 @@ export default function CustomersPage() {
 
           <div className="flex justify-end gap-2 mt-5">
             <button
+              type="button"
               onClick={() => setEditingCustomer(null)}
-              className="px-4 py-2 border border-gray-200 rounded-lg text-[12.5px] font-semibold hover:bg-gray-50"
+              className="rounded-xl border border-slate-200 px-4 py-2 text-[12.5px] font-semibold text-ink hover:bg-slate-50"
             >
               Cancel
             </button>
             <button
+              type="button"
               onClick={handleSaveEdit}
               disabled={saving}
-              className="px-4 py-2 bg-accent text-white rounded-lg text-[12.5px] font-semibold hover:bg-accent2 disabled:opacity-50"
+              className="agua-btn agua-btn-primary !py-2 disabled:opacity-50"
             >
-              {saving ? 'Saving...' : '💾 Save Changes'}
+              {saving ? 'Saving…' : 'Save changes'}
             </button>
           </div>
         </Modal>

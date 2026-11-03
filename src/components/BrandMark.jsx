@@ -9,7 +9,7 @@ export default function BrandMark({ size = 'md', light = false }) {
   return (
     <div className="flex items-center gap-3">
       <div
-        className={`${box} flex items-center justify-center bg-gradient-to-br from-cyan-400 to-teal-600 text-white shadow-lg shadow-cyan-500/30`}
+        className={`${box} flex items-center justify-center bg-blue-500 text-white shadow-lg shadow-blue-500/25`}
       >
         💧
       </div>

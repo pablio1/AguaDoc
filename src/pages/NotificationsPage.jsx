@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { showToast } from '../components/ui/Toast';
 import { apiMarkNotificationRead, apiMarkAllNotificationsRead } from '../api';
+import PageHeader from '../components/admin/PageHeader';
+import SectionCard from '../components/admin/SectionCard';
 
 const TABS = ['all', 'unread'];
 
@@ -69,113 +71,119 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div>
-      <div className="agua-card p-4">
+    <div className="space-y-5">
+      <PageHeader
+        title="Notifications"
+        subtitle={
+          <>
+            Alerts for orders, payments, debt, and inventory.
+            {unread > 0 && (
+              <span className="ml-2 inline-flex rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+                {unread} unread
+              </span>
+            )}
+          </>
+        }
+      >
+        <button
+          type="button"
+          onClick={handleMarkAllRead}
+          disabled={unread === 0}
+          className="agua-btn agua-btn-primary !py-2 !text-xs disabled:opacity-40"
+        >
+          Mark all read
+        </button>
+      </PageHeader>
 
-        {/* Header */}
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <div className="text-[15px] font-bold flex items-center gap-2">
-              🔔 Notifications & SMS Center
-              {unread > 0 && (
-                <span className="bg-red-100 text-red-800 text-[11px] font-semibold px-2 py-0.5 rounded-full">{unread}</span>
-              )}
-            </div>
-            <div className="text-xs text-gray-500 mt-0.5">
-              Automatic alerts for new orders, order status changes, payments, and low stock or high debt risk.
-            </div>
-          </div>
-          <button
-            onClick={handleMarkAllRead}
-            disabled={unread === 0}
-            className="bg-accent hover:bg-accent2 disabled:opacity-40 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition cursor-pointer"
-          >
-            ✔ Mark All Read
-          </button>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-
-          {/* Left: Notification List */}
-          <div>
-            {/* Tabs */}
-            <div className="flex border-b-2 border-gray-200 mb-3">
-              {TABS.map(t => (
+      <div className="grid gap-4 lg:grid-cols-2">
+        <SectionCard
+          title="Inbox"
+          description="Click a row to mark as read"
+          action={
+            <div className="flex rounded-lg border border-slate-200 p-0.5">
+              {TABS.map((t) => (
                 <button
                   key={t}
+                  type="button"
                   onClick={() => setTab(t)}
-                  className={`px-4 py-1.5 text-[13px] font-medium cursor-pointer border-b-2 -mb-0.5 transition capitalize
-                    ${tab === t ? 'text-accent border-accent' : 'text-gray-500 border-transparent hover:text-accent'}`}
+                  className={`cursor-pointer rounded-md px-3 py-1 text-xs font-semibold capitalize transition ${
+                    tab === t ? 'bg-blue-500 text-white' : 'text-muted hover:text-ink'
+                  }`}
                 >
                   {t}
                 </button>
               ))}
             </div>
-
-            {/* Notification Rows */}
-            <div className="max-h-[420px] overflow-y-auto">
-              {filtered.length === 0 ? (
-                <div className="text-center text-gray-400 text-xs py-6">No notifications.</div>
-              ) : filtered.map(n => (
-                <div
-                  key={n.id}
-                  onClick={() => handleMarkRead(n)}
-                  className={`flex gap-2.5 p-2.5 rounded-lg mb-1.5 cursor-pointer border transition hover:bg-gray-50
-                    ${n.read ? 'border-transparent' : 'bg-blue-50 border-blue-200'}`}
-                >
-                  <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${DOT_STYLE[n.type] || DOT_STYLE.System}`} />
-                  <div className="flex-1">
-                    <div className="text-[13px]">{n.message}</div>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className="text-[11px] text-gray-400">{timeAgo(n.createdAt)}</span>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${BADGE_STYLE[n.type] || BADGE_STYLE.System}`}>
-                        {n.type}
-                      </span>
-                    </div>
+          }
+          bodyClassName="max-h-[460px] overflow-y-auto px-3 pb-3 pt-1"
+        >
+          {filtered.length === 0 ? (
+            <p className="py-10 text-center text-sm text-muted">No notifications.</p>
+          ) : (
+            filtered.map((n) => (
+              <div
+                key={n.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => handleMarkRead(n)}
+                onKeyDown={(e) => e.key === 'Enter' && handleMarkRead(n)}
+                className={`mb-2 flex cursor-pointer gap-2.5 rounded-xl border px-3 py-2.5 transition hover:bg-slate-50/80 ${
+                  n.read ? 'border-transparent' : 'border-blue-100 bg-blue-50/50'
+                }`}
+              >
+                <div className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${DOT_STYLE[n.type] || DOT_STYLE.System}`} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] text-ink">{n.message}</p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <span className="text-[11px] text-muted">{timeAgo(n.createdAt)}</span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${BADGE_STYLE[n.type] || BADGE_STYLE.System}`}
+                    >
+                      {n.type}
+                    </span>
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Right: SMS Panel (preview only — no real SMS gateway wired up yet) */}
-          <div className="bg-gray-50 rounded-xl p-4">
-            <div className="text-[13px] font-bold mb-1">📱 SMS Blast Campaign</div>
-            <div className="text-xs text-gray-500 mb-3">Preview a reminder message for customers with outstanding balances.</div>
-
-            <div className="text-[11.5px] font-bold text-gray-500 uppercase tracking-wide mb-2">Overdue Debtors</div>
-            {debtors.length === 0 ? (
-              <div className="text-xs text-gray-400 py-2">No debtors 🎉</div>
-            ) : debtors.map(c => (
-              <div key={c.id} className="flex justify-between items-center py-1.5 text-[13px] border-b border-gray-200 last:border-b-0">
-                <span>{c.fullName}</span>
-                <span className="text-red-600 font-bold">₱{c.balance}</span>
               </div>
-            ))}
+            ))
+          )}
+        </SectionCard>
 
-            <div className="mt-3">
-              <label className="block text-[12.5px] font-semibold mb-1">Message Template</label>
-              <textarea
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] outline-none focus:border-accent resize-none bg-white"
-                value={smsTemplate}
-                onChange={e => setSmsTemplate(e.target.value)}
-              />
-            </div>
+        <SectionCard title="SMS reminders" description="Preview only — no gateway connected yet" bodyClassName="px-5 pb-5 pt-2">
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">Overdue debtors</p>
+          {debtors.length === 0 ? (
+            <p className="text-sm text-muted">No customers with balance.</p>
+          ) : (
+            <ul className="mb-4 divide-y divide-slate-100 rounded-xl border border-slate-100">
+              {debtors.map((c) => (
+                <li key={c.id} className="flex items-center justify-between px-3 py-2.5 text-sm">
+                  <span className="font-medium text-ink">{c.fullName}</span>
+                  <span className="font-bold text-red-600">₱{c.balance}</span>
+                </li>
+              ))}
+            </ul>
+          )}
 
-            <div className="text-xs font-semibold text-gray-500 mt-2 mb-1">Preview</div>
-            <div className="bg-white border border-gray-200 rounded-lg px-3 py-2.5 text-[12.5px] text-gray-500 min-h-[50px]">
-              {smsPreview}
-            </div>
-            <button
-              disabled
-              title="Not connected to a real SMS gateway yet"
-              className="mt-2 w-full bg-gray-300 text-white text-xs font-semibold py-2 rounded-lg cursor-not-allowed"
-            >
-              📤 Send SMS Blast (not connected)
-            </button>
+          <label className="mb-1 block text-[12.5px] font-semibold text-ink">Message template</label>
+          <textarea
+            rows={3}
+            className="agua-input resize-none"
+            value={smsTemplate}
+            onChange={(e) => setSmsTemplate(e.target.value)}
+          />
+
+          <p className="mb-1 mt-3 text-xs font-semibold text-muted">Preview</p>
+          <div className="min-h-[50px] rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5 text-[12.5px] text-muted">
+            {smsPreview}
           </div>
-        </div>
+          <button
+            type="button"
+            disabled
+            title="Not connected to a real SMS gateway yet"
+            className="mt-3 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 py-2.5 text-xs font-semibold text-slate-400"
+          >
+            Send SMS blast (not connected)
+          </button>
+        </SectionCard>
       </div>
     </div>
   );

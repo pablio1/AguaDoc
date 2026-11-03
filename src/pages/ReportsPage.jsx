@@ -3,6 +3,10 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { showToast } from '../components/ui/Toast';
 import { Chart } from 'chart.js/auto';
+import PageHeader from '../components/admin/PageHeader';
+import SectionCard from '../components/admin/SectionCard';
+import FilterPills from '../components/admin/FilterPills';
+import { TABLE_BODY_ROW, TABLE_HEAD_ROW } from '../components/admin/tableStyles';
 
 export default function ReportsPage() {
   const { state } = useApp();
@@ -64,7 +68,7 @@ export default function ReportsPage() {
       type: 'bar',
       data: {
         labels,
-        datasets: [{ label: 'Revenue', data, backgroundColor: '#7c3aed', borderRadius: 5 }],
+        datasets: [{ label: 'Revenue', data, backgroundColor: '#3B82F6', borderRadius: 6 }],
       },
       options: {
         responsive: true, maintainAspectRatio: false,
@@ -115,88 +119,69 @@ export default function ReportsPage() {
   };
 
   return (
-    <div>
-      <div className="agua-card p-4">
+    <div className="space-y-5">
+      <PageHeader title="Reports & analytics" subtitle="Financial summaries and order-level transaction history.">
+        <button
+          type="button"
+          onClick={handleExportCSV}
+          className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-ink hover:bg-slate-50"
+        >
+          Export CSV
+        </button>
+        <button type="button" onClick={() => window.print()} className="agua-btn agua-btn-primary !py-2 !text-xs">
+          Print
+        </button>
+      </PageHeader>
 
-        {/* Header */}
-        <div className="flex justify-between items-start mb-4">
-          <div>
-            <div className="text-[15px] font-bold">📊 Reports & Analytics</div>
-            <div className="text-xs text-gray-500 mt-0.5">Generate financial summaries and review transaction histories.</div>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={handleExportCSV}
-              className="border border-gray-200 text-gray-700 text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-gray-50 cursor-pointer"
-            >
-              ⬇ Export CSV
-            </button>
-            <button
-              onClick={() => window.print()}
-              className="bg-accent text-white text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-accent2 transition cursor-pointer"
-            >
-              🖨 Print
-            </button>
-          </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="agua-card px-5 py-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">Gross total sales</p>
+          <p className="mt-2 font-display text-2xl font-bold text-ink">₱{Math.round(grossTotal).toLocaleString()}</p>
         </div>
+        <div className="agua-card px-5 py-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">Actual collections</p>
+          <p className="mt-2 font-display text-2xl font-bold text-emerald-600">₱{Math.round(collected).toLocaleString()}</p>
+        </div>
+        <div className="agua-card px-5 py-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">Outstanding debts</p>
+          <p className="mt-2 font-display text-2xl font-bold text-red-600">₱{Math.round(outstanding).toLocaleString()}</p>
+        </div>
+      </div>
 
-        {/* Summary Stat Cards */}
-        <div className="grid grid-cols-3 gap-3 mb-4">
-          <div className="bg-green-600 rounded-xl p-3.5 text-white">
-            <div className="text-xs opacity-85">Gross Total Sales</div>
-            <div className="text-[22px] font-black mt-1">₱{Math.round(grossTotal).toLocaleString()}</div>
-          </div>
-          <div className="bg-blue-600 rounded-xl p-3.5 text-white">
-            <div className="text-xs opacity-85">Actual Collections</div>
-            <div className="text-[22px] font-black mt-1">₱{Math.round(collected).toLocaleString()}</div>
-          </div>
-          <div className="bg-red-500 rounded-xl p-3.5 text-white">
-            <div className="text-xs opacity-85">Outstanding Debts</div>
-            <div className="text-[22px] font-black mt-1">₱{Math.round(outstanding).toLocaleString()}</div>
-          </div>
-        </div>
-
-        {/* Weekly / Monthly Toggle */}
-        <div className="flex gap-2 mb-3">
-          {['weekly', 'monthly'].map(m => (
-            <button
-              key={m}
-              onClick={() => setMode(m)}
-              className={`px-3 py-1 rounded-full text-xs font-semibold border transition cursor-pointer
-                ${mode === m
-                  ? 'bg-accent text-white border-accent'
-                  : 'bg-white text-gray-500 border-gray-200 hover:border-accent hover:text-accent'}`}
-            >
-              {m.charAt(0).toUpperCase() + m.slice(1)}
-            </button>
-          ))}
-        </div>
-
-        {/* Revenue Chart */}
-        <div className="text-[11.5px] font-bold text-gray-500 uppercase tracking-wide mb-2">
-          {mode === 'weekly' ? 'Weekly' : 'Monthly'} Revenue Breakdown
-        </div>
-        <div className="relative h-[240px] mb-4">
+      <SectionCard
+        title={`${mode === 'weekly' ? 'Weekly' : 'Monthly'} revenue`}
+        description="Delivered order revenue for the selected period"
+        action={
+          <FilterPills
+            options={[
+              { value: 'weekly', label: 'Weekly' },
+              { value: 'monthly', label: 'Monthly' },
+            ]}
+            value={mode}
+            onChange={setMode}
+            className="!mb-0"
+          />
+        }
+        bodyClassName="px-5 pb-5 pt-2"
+      >
+        <div className="relative h-[240px]">
           <canvas ref={canvasRef} />
         </div>
+      </SectionCard>
 
-        {/* Transaction History Table */}
-        <div className="text-[11.5px] font-bold text-gray-500 uppercase tracking-wide mb-2">
-          Customer Transaction History
-        </div>
-        <div className="max-h-[360px] overflow-y-auto border border-gray-100 rounded-lg">
-        <table className="w-full text-[13px] border-collapse">
-          <thead className="sticky top-0 bg-white z-10">
-            <tr>
-              {['Customer', 'Order ID', 'Gallons', 'Amount', 'Payment', 'Date', 'Status'].map(h => (
-                <th key={h} className="text-left px-2.5 py-2 text-[11.5px] font-semibold text-gray-500 border-b-2 border-gray-200 whitespace-nowrap">
+      <SectionCard title="Transaction history" description="All orders with payment and status" bodyClassName="max-h-[400px] overflow-auto">
+        <table className="w-full min-w-[720px] text-sm">
+          <thead className="sticky top-0 z-10 bg-white">
+            <tr className={TABLE_HEAD_ROW}>
+              {['Customer', 'Order ID', 'Gallons', 'Amount', 'Payment', 'Date', 'Status'].map((h) => (
+                <th key={h} className={`whitespace-nowrap px-3 py-3 ${h === 'Customer' ? 'pl-5' : ''}`}>
                   {h}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {state.orders.map(o => {
+            {state.orders.map((o) => {
               const id  = o.userId || o.custId;
               const customer =
                 (state.users     || []).find(u => String(u.id) === String(id)) ||
@@ -208,19 +193,19 @@ export default function ReportsPage() {
                 ? new Date(o.date || o.createdAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
                 : '—';
               return (
-                <tr key={o.id} className="hover:bg-gray-50 border-b border-gray-100 last:border-b-0">
-                  <td className="px-2.5 py-2.5 font-medium">{customer?.fullName ?? '—'}</td>
-                  <td className="px-2.5 py-2.5 font-mono text-gray-600">#{String(o.id).padStart(2, '0')}</td>
-                  <td className="px-2.5 py-2.5 text-gray-500">{o.quantity ?? o.gallons ?? '—'}</td>
-                  <td className="px-2.5 py-2.5 font-semibold">₱{o.total ?? o.amount ?? '—'}</td>
-                  <td className="px-2.5 py-2.5">
+                <tr key={o.id} className={TABLE_BODY_ROW}>
+                  <td className="px-5 py-3.5 font-semibold text-ink">{customer?.fullName ?? '—'}</td>
+                  <td className="px-3 py-3.5 font-mono text-xs text-muted">#{String(o.id).padStart(2, '0')}</td>
+                  <td className="px-3 py-3.5 text-muted">{o.quantity ?? o.gallons ?? '—'}</td>
+                  <td className="px-3 py-3.5 font-bold text-ink">₱{o.total ?? o.amount ?? '—'}</td>
+                  <td className="px-3 py-3.5">
                     <span className={`inline-flex px-2 py-0.5 rounded-full text-[11.5px] font-semibold
                       ${pay ? (methodBadge[pay.method] ?? 'bg-gray-100 text-gray-600') : 'bg-yellow-100 text-yellow-800'}`}>
                       {pay ? pay.method : 'Unpaid'}
                     </span>
                   </td>
-                  <td className="px-2.5 py-2.5 text-gray-500">{displayDate}</td>
-                  <td className="px-2.5 py-2.5">
+                  <td className="px-3 py-3.5 text-muted">{displayDate}</td>
+                  <td className="px-3 py-3.5">
                     <span className={`inline-flex px-2 py-0.5 rounded-full text-[11.5px] font-semibold
                       ${o.status === 'Delivered' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
                       {o.status}
@@ -231,9 +216,7 @@ export default function ReportsPage() {
             })}
           </tbody>
         </table>
-        </div>
-
-      </div>
+      </SectionCard>
     </div>
   );
 }

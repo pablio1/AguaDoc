@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import Modal from '../components/ui/Modal';
 import { showToast } from '../components/ui/Toast';
 import { apiRestockItem, apiUpdateInventory } from '../api';
+import PageHeader from '../components/admin/PageHeader';
 
 const CATEGORY_META = {
   Containers: { icon: Box, iconBg: 'bg-sky-50 text-sky-600' },
@@ -119,28 +120,28 @@ export default function InventoryPage() {
 
   return (
     <div className="space-y-5">
-      {/* Header — match reference: title, subtitle, teal CTA */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="font-display text-2xl font-bold tracking-tight text-ink">Inventory & Stocks</h2>
-          <p className="mt-1 text-sm text-muted">
+      <PageHeader
+        title="Inventory & stocks"
+        subtitle={
+          <>
             Monitor gallon supplies, caps, seals, and equipment restock history.
             {lowCount > 0 && (
               <span className="ml-2 inline-flex items-center gap-1 font-semibold text-amber-600">
                 <AlertTriangle size={13} /> {lowCount} low
               </span>
             )}
-          </p>
-        </div>
+          </>
+        }
+      >
         <button
           type="button"
           onClick={() => stockItems[0] && openRestock(stockItems[0])}
           disabled={!stockItems.length}
-          className="inline-flex items-center gap-2 self-start rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700 disabled:opacity-50"
+          className="agua-btn agua-btn-primary inline-flex items-center gap-2 !py-2.5 !text-sm disabled:opacity-50"
         >
-          <Plus size={16} /> Restock Item
+          <Plus size={16} /> Restock item
         </button>
-      </div>
+      </PageHeader>
 
       {/* Summary cards — clean white cards, category / name / qty / icon */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -240,7 +241,7 @@ export default function InventoryPage() {
                         <button
                           type="button"
                           onClick={() => openRestock(item)}
-                          className="rounded-full bg-teal-50 px-3.5 py-1.5 text-[12px] font-semibold text-teal-700 transition hover:bg-teal-100"
+                          className="rounded-full bg-blue-50 px-3.5 py-1.5 text-[12px] font-semibold text-blue-700 transition hover:bg-blue-100"
                         >
                           Restock
                         </button>
@@ -258,7 +259,7 @@ export default function InventoryPage() {
       <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_8px_24px_rgba(15,42,74,0.04)]">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
           <div className="flex items-start gap-3">
-            <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl bg-teal-50 text-teal-700">
+            <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
               <History size={16} />
             </div>
             <div>
@@ -342,7 +343,7 @@ export default function InventoryPage() {
           <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-100">
             <div
               className={`h-full rounded-full transition-all ${
-                waterPct < 20 ? 'bg-red-500' : waterPct < 50 ? 'bg-amber-400' : 'bg-gradient-to-r from-teal-400 to-teal-600'
+                waterPct < 20 ? 'bg-red-500' : waterPct < 50 ? 'bg-amber-400' : 'bg-gradient-to-r from-blue-400 to-blue-600'
               }`}
               style={{ width: `${Math.min(100, Math.max(0, waterPct))}%` }}
             />
@@ -376,7 +377,7 @@ export default function InventoryPage() {
             <div className="mb-3">
               <label className="mb-1 block text-xs font-semibold text-muted">Item</label>
               <select
-                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-teal-500"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
                 value={restockItem.id}
                 onChange={(e) => {
                   const next = stockItems.find((i) => i.id === e.target.value);
@@ -397,7 +398,7 @@ export default function InventoryPage() {
               min="1"
               value={restockQty}
               onChange={(e) => setRestockQty(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-teal-500"
+              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
             />
           </div>
 
@@ -409,7 +410,7 @@ export default function InventoryPage() {
               placeholder="e.g. Weekly supplier delivery"
               value={restockNote}
               onChange={(e) => setRestockNote(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-teal-500"
+              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
             />
           </div>
 
@@ -425,7 +426,7 @@ export default function InventoryPage() {
               type="button"
               disabled={saving}
               onClick={handleRestock}
-              className="rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50"
+              className="agua-btn agua-btn-primary disabled:opacity-50"
             >
               {saving ? 'Saving…' : 'Confirm Restock'}
             </button>
@@ -443,7 +444,7 @@ export default function InventoryPage() {
               min="0"
               value={tankForm.waterLevel}
               onChange={(e) => setTankForm({ ...tankForm, waterLevel: e.target.value })}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-teal-500"
+              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
             />
           </div>
           <div className="mb-4">
@@ -453,7 +454,7 @@ export default function InventoryPage() {
               min="1"
               value={tankForm.maxCapacity}
               onChange={(e) => setTankForm({ ...tankForm, maxCapacity: e.target.value })}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-teal-500"
+              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
             />
           </div>
           <div className="flex justify-end gap-2">
@@ -464,7 +465,7 @@ export default function InventoryPage() {
               type="button"
               disabled={saving}
               onClick={handleSaveTank}
-              className="rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50"
+              className="agua-btn agua-btn-primary disabled:opacity-50"
             >
               {saving ? 'Saving…' : 'Save'}
             </button>

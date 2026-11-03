@@ -4,6 +4,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { apiGetDeliveryRoute, apiUpdateOrder } from '../api';
 import { CARTO_ATTRIBUTION, cartoVoyagerUrl } from '../lib/mapTiles';
+import PageHeader from '../components/admin/PageHeader';
 
 // Vite/webpack break Leaflet's default marker icon paths — rebuild them from CDN so pins actually render.
 delete L.Icon.Default.prototype._getIconUrl;
@@ -18,7 +19,7 @@ function numberedIcon(n) {
   return L.divIcon({
     className: 'aguadoc-stop-marker',
     html: `<div style="
-      background:#0ea5c9;color:white;font-weight:700;font-size:13px;
+      background:#3B82F6;color:white;font-weight:700;font-size:13px;
       width:28px;height:28px;border-radius:50%;display:flex;
       align-items:center;justify-content:center;border:2px solid white;
       box-shadow:0 1px 4px rgba(0,0,0,0.4);
@@ -35,7 +36,7 @@ const depotIcon = L.divIcon({
     width:32px;height:32px;border-radius:8px;display:flex;
     align-items:center;justify-content:center;border:2px solid white;
     box-shadow:0 1px 4px rgba(0,0,0,0.4);
-  ">💧</div>`,
+  ">H₂O</div>`,
   iconSize: [32, 32],
   iconAnchor: [16, 16],
 });
@@ -113,20 +114,15 @@ export default function DeliveryRoutePage() {
   const routeLine = data.geometry?.map(([lng, lat]) => [lat, lng]) || [];
 
   return (
-    // Explicit viewport height — `h-full` fails under AppLayout's scrollable main.
-    <div className="flex h-[calc(100dvh-7.5rem)] min-h-[480px] gap-4">
-      {/* Sidebar: ordered stop list */}
+    <div className="flex h-[calc(100dvh-7.5rem)] min-h-[480px] flex-col gap-4">
+      <PageHeader title="Delivery route" subtitle="Optimized stops for pending deliveries with mapped addresses.">
+        <button type="button" onClick={load} className="agua-btn agua-btn-primary !py-2 !text-xs">
+          Refresh route
+        </button>
+      </PageHeader>
+
+      <div className="flex min-h-0 flex-1 gap-4">
       <div className="agua-card flex w-80 shrink-0 flex-col overflow-hidden p-4">
-        <div className="mb-3 flex shrink-0 items-center justify-between">
-          <h2 className="font-display font-semibold text-ink">Delivery Route</h2>
-          <button
-            type="button"
-            onClick={load}
-            className="text-xs font-semibold text-accent2 hover:underline"
-          >
-            Refresh
-          </button>
-        </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {loading && <p className="text-sm text-muted">Calculating best route...</p>}
@@ -139,7 +135,7 @@ export default function DeliveryRoutePage() {
             {data.stops.map((stop, i) => (
               <li key={stop.id} className="rounded-xl border border-slate-100 p-3">
                 <div className="flex items-start gap-2">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-bold text-white">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-500 text-xs font-bold text-white">
                     {i + 1}
                   </span>
                   <div className="min-w-0 flex-1">
@@ -151,7 +147,7 @@ export default function DeliveryRoutePage() {
                 <button
                   type="button"
                   onClick={() => markDelivered(stop.id)}
-                  className="mt-2 w-full rounded-lg border border-accent/40 py-1.5 text-xs font-semibold text-accent2 hover:bg-accent/10"
+                  className="mt-2 w-full rounded-lg border border-blue-200 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50"
                 >
                   Mark Delivered
                 </button>
@@ -190,9 +186,10 @@ export default function DeliveryRoutePage() {
           ))}
 
           {routeLine.length > 0 && (
-            <Polyline positions={routeLine} pathOptions={{ color: '#0ea5c9', weight: 4 }} />
+            <Polyline positions={routeLine} pathOptions={{ color: '#3B82F6', weight: 4 }} />
           )}
         </MapContainer>
+      </div>
       </div>
     </div>
   );

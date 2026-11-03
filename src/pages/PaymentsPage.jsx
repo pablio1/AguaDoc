@@ -4,6 +4,9 @@ import { useApp } from '../context/AppContext';
 import Modal from '../components/ui/Modal';
 import { showToast } from '../components/ui/Toast';
 import { apiAddPayment, apiUpdateCustomer } from '../api';
+import PageHeader from '../components/admin/PageHeader';
+import SectionCard from '../components/admin/SectionCard';
+import { TABLE_BODY_ROW, TABLE_HEAD_ROW } from '../components/admin/tableStyles';
 
 export default function PaymentsPage() {
   const { state, dispatch } = useApp();
@@ -60,136 +63,125 @@ const debtorCount    = state.customers.filter(c => parseFloat(c.balance) > 0).le
 
   // ── Payment method badge color ──
   const methodBadge = {
-    Cash:   'bg-indigo-100 text-indigo-800',
-    GCash:  'bg-green-100 text-green-800',
-    Online: 'bg-blue-100 text-blue-800',
-    Xendit: 'bg-cyan-100 text-cyan-800',
+    Cash: 'bg-slate-100 text-slate-700',
+    GCash: 'bg-emerald-50 text-emerald-700',
+    Online: 'bg-blue-50 text-blue-700',
+    Xendit: 'bg-sky-50 text-sky-700',
   };
 
   return (
-    <div>
-      <div className="agua-card p-4 mb-4">
+    <div className="space-y-5">
+      <PageHeader
+        title="Payments & Billing"
+        subtitle="Record collections, settle outstanding balances, and review payment history."
+      >
+        <button type="button" onClick={() => setShowModal(true)} className="agua-btn agua-btn-primary !py-2 !text-xs">
+          Record payment
+        </button>
+      </PageHeader>
 
-        {/* Header */}
-        <div className="flex justify-between items-start mb-4">
-          <div>
-            <div className="text-[15px] font-bold">💳 Payment & Billing</div>
-            <div className="text-xs text-gray-500 mt-0.5">Record payments and monitor outstanding debts.</div>
-          </div>
-          <button
-            onClick={() => setShowModal(true)}
-            className="bg-accent text-white text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-accent2 transition cursor-pointer"
-          >
-            + Record Payment
-          </button>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="agua-card px-5 py-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">Total collected</p>
+          <p className="mt-2 font-display text-2xl font-bold text-emerald-600">₱{totalCollected.toFixed(2)}</p>
+          <p className="mt-1 text-xs text-muted">{state.payments.length} transactions logged</p>
         </div>
-
-        {/* Summary Cards */}
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <div className="bg-green-100 rounded-xl p-3.5 flex items-center gap-3">
-            <span className="text-3xl">💰</span>
-            <div>
-              <div className="text-xs text-green-700 font-semibold">Total Collected</div>
-              <div className="text-[22px] font-black text-green-800">₱{totalCollected.toFixed(2)}</div>
-              <div className="text-xs text-green-700">{state.payments.length} transactions</div>
-            </div>
-          </div>
-          <div className="bg-red-100 rounded-xl p-3.5 flex items-center gap-3">
-            <span className="text-3xl">🛡</span>
-            <div>
-              <div className="text-xs text-red-700 font-semibold">Total Outstanding Debt</div>
-              <div className="text-[22px] font-black text-red-800">₱{totalDebt.toFixed(2)}</div>
-              <div className="text-xs text-red-700">{debtorCount} customers with debt</div>
-            </div>
-          </div>
+        <div className="agua-card px-5 py-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">Outstanding debt</p>
+          <p className="mt-2 font-display text-2xl font-bold text-red-600">₱{totalDebt.toFixed(2)}</p>
+          <p className="mt-1 text-xs text-muted">{debtorCount} customer{debtorCount === 1 ? '' : 's'} with balance</p>
         </div>
+      </div>
 
-        {/* Two columns: Unpaid + History */}
-        <div className="grid grid-cols-2 gap-4">
-
-          {/* Unpaid Balances */}
-          <div>
-            <div className="text-[11.5px] font-bold text-gray-500 uppercase tracking-wide mb-2.5">
-              Unpaid Balances
-            </div>
-            {unpaidCustomers.length === 0 ? (
-              <div className="text-center text-gray-400 text-xs py-4">No unpaid balances 🎉</div>
-            ) : (
-              <div className="max-h-[360px] overflow-y-auto pr-1">
-              {unpaidCustomers.map(c => (
-                <div key={c.id} className="flex justify-between items-center bg-gray-50 rounded-lg px-3 py-2.5 mb-2">
-                  <div>
-                    <div className="text-[13.5px] font-semibold">{c.fullName}</div>
-                    <div className="text-[11.5px] text-gray-500">{c.phone}</div>
-                  </div>
-                  <div className="text-base font-black text-red-600">₱{c.balance}</div>
-                </div>
-              ))}
-              </div>
-            )}
-          </div>
-
-          {/* Payment History */}
-          <div>
-            <div className="flex justify-between items-center mb-2.5">
-              <div className="text-[11.5px] font-bold text-gray-500 uppercase tracking-wide">
-                Payment History
-              </div>
-              <span className="text-accent text-[11px]">{state.payments.length} records</span>
-            </div>
-            <div className="max-h-[360px] overflow-y-auto border border-gray-100 rounded-lg">
-            <table className="w-full text-[13px] border-collapse">
-              <thead className="sticky top-0 bg-white z-10">
-                <tr>
-                  {['Customer', 'Method', 'Amount', 'Date', ''].map((h, i) => (
-                    <th key={i} className="text-left px-2 py-1.5 text-[11.5px] font-semibold text-gray-500 border-b-2 border-gray-100">
-                      {h}
-                    </th>
-                  ))}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <SectionCard
+          title="Unpaid balances"
+          description="Sorted by highest balance first"
+          bodyClassName="max-h-[400px] overflow-auto"
+        >
+          {unpaidCustomers.length === 0 ? (
+            <p className="px-5 py-10 text-center text-sm text-muted">No outstanding balances.</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 z-10 bg-white">
+                <tr className={TABLE_HEAD_ROW}>
+                  <th className="px-5 py-3">Customer</th>
+                  <th className="px-3 py-3">Phone</th>
+                  <th className="px-5 py-3 text-right">Balance</th>
                 </tr>
               </thead>
               <tbody>
-            {paymentHistory.map(p => {
-               const customer =
-               (state.customers || []).find(c => String(c.id) === String(p.custId)) ||
-               (state.users     || []).find(u => String(u.id) === String(p.custId));
-               const custName = customer?.fullName ?? '?';
-            return (
-               <tr key={p.id} className="hover:bg-gray-50 border-b border-gray-100 last:border-b-0">
-                <td className="px-2 py-2.5 font-medium">{custName}</td>
-                 <td className="px-2 py-2.5">
-                   <span className={`inline-flex px-2 py-0.5 rounded-full text-[11.5px] font-semibold ${methodBadge[p.method]}`}>
-                   {p.method}
-                   </span>
-                 </td>
-                     <td className="px-2 py-2.5 font-bold text-green-600">+₱{parseFloat(p.amount).toFixed(2)}</td>
-                       <td className="px-2 py-2.5 text-gray-500">{p.date}</td>
-                         <td className="px-2 py-2.5">
-                           <button
-                             onClick={() => showToast(`🧾 Receipt: ₱${parseFloat(p.amount).toFixed(2)} - ${p.method}`)}
-                             className="border border-gray-200 rounded w-7 h-7 flex items-center justify-center text-[13px] hover:bg-gray-50 cursor-pointer"
-                               >
-                              🧾
-                            </button>
-                         </td>
-                       </tr>
-                    );
-                })}
+                {unpaidCustomers.map((c) => (
+                  <tr key={c.id} className={TABLE_BODY_ROW}>
+                    <td className="px-5 py-3.5 font-semibold text-ink">{c.fullName}</td>
+                    <td className="px-3 py-3.5 text-muted">{c.phone}</td>
+                    <td className="px-5 py-3.5 text-right font-bold text-red-600">₱{c.balance}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
-            </div>
-          </div>
+          )}
+        </SectionCard>
 
-        </div>
+        <SectionCard
+          title="Debt Payment Settlement History"
+          description={`${state.payments.length} settlement${state.payments.length === 1 ? '' : 's'} recorded`}
+          bodyClassName="max-h-[400px] overflow-auto"
+        >
+          <table className="w-full min-w-[520px] text-sm">
+            <thead className="sticky top-0 z-10 bg-white">
+              <tr className={TABLE_HEAD_ROW}>
+                {['Date Settled', 'Customer Name', 'Amount Paid', 'Payment Method', 'Reference'].map((h, i) => (
+                  <th key={h} className={`px-3 py-3 ${i === 0 ? 'pl-5' : ''} ${i === 4 ? 'pr-5' : ''}`}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {paymentHistory.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-5 py-10 text-center text-sm text-muted">
+                    No settlements yet — record a payment to start the history.
+                  </td>
+                </tr>
+              ) : (
+                paymentHistory.map((p) => {
+                  const customer =
+                    (state.customers || []).find((c) => String(c.id) === String(p.custId)) ||
+                    (state.users || []).find((u) => String(u.id) === String(p.custId));
+                  const custName = customer?.fullName ?? '—';
+                  return (
+                    <tr key={p.id} className={TABLE_BODY_ROW}>
+                      <td className="whitespace-nowrap px-5 py-3.5 text-muted">{p.date || '—'}</td>
+                      <td className="px-3 py-3.5 font-semibold text-ink">{custName}</td>
+                      <td className="px-3 py-3.5 font-bold text-emerald-600">₱{parseFloat(p.amount).toFixed(2)}</td>
+                      <td className="px-3 py-3.5">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${methodBadge[p.method] || 'bg-slate-100 text-slate-600'}`}
+                        >
+                          {p.method}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 font-medium text-blue-600">
+                        {p.orderId || p.ref || p.reference || 'N/A'}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </SectionCard>
       </div>
 
       {/* ── Record Payment Modal ── */}
       {showModal && (
-        <Modal title="💳 Record New Payment" onClose={() => setShowModal(false)}>
+        <Modal title="Record new payment" onClose={() => setShowModal(false)}>
           <div className="mb-3">
             <label className="block text-[12.5px] font-semibold mb-1">Select Customer</label>
             <select
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] outline-none focus:border-accent"
+              className="agua-input"
               value={form.custId}
               onChange={e => setForm({ ...form, custId: e.target.value })}
             >
@@ -203,7 +195,7 @@ const debtorCount    = state.customers.filter(c => parseFloat(c.balance) > 0).le
             <div>
               <label className="block text-[12.5px] font-semibold mb-1">Payment Method</label>
               <select
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] outline-none focus:border-accent"
+                className="agua-input"
                 value={form.method}
                 onChange={e => setForm({ ...form, method: e.target.value })}
               >
@@ -216,18 +208,22 @@ const debtorCount    = state.customers.filter(c => parseFloat(c.balance) > 0).le
               <label className="block text-[12.5px] font-semibold mb-1">Amount Paid (₱)</label>
               <input
                 type="number" min="1" placeholder="0"
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] outline-none focus:border-accent"
+                className="agua-input"
                 value={form.amount}
                 onChange={e => setForm({ ...form, amount: e.target.value })}
               />
             </div>
           </div>
           <div className="flex gap-2 justify-end mt-4">
-            <button onClick={() => setShowModal(false)} className="px-4 py-2 border border-gray-200 rounded-lg text-[12.5px] font-semibold hover:bg-gray-50 cursor-pointer">
+            <button
+              type="button"
+              onClick={() => setShowModal(false)}
+              className="rounded-xl border border-slate-200 px-4 py-2 text-[12.5px] font-semibold text-ink hover:bg-slate-50"
+            >
               Cancel
             </button>
-            <button onClick={handleRecordPayment} className="px-4 py-2 bg-green-600 text-white rounded-lg text-[12.5px] font-semibold hover:bg-green-700 cursor-pointer">
-              ✅ Confirm Payment
+            <button type="button" onClick={handleRecordPayment} className="agua-btn agua-btn-primary !py-2">
+              Confirm payment
             </button>
           </div>
         </Modal>

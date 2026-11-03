@@ -3,6 +3,9 @@ import { useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Chart } from 'chart.js/auto';
 import { useApp } from '../context/AppContext';
+import PageHeader from '../components/admin/PageHeader';
+import SectionCard from '../components/admin/SectionCard';
+import { TABLE_BODY_ROW, TABLE_HEAD_ROW } from '../components/admin/tableStyles';
 
 const PRICE = 50;
 
@@ -131,8 +134,8 @@ export default function DashboardPage() {
           {
             label: 'Actual',
             data: last7Totals,
-            borderColor: '#1eb8c8',
-            backgroundColor: 'rgba(30,184,200,.1)',
+            borderColor: '#3B82F6',
+            backgroundColor: 'rgba(59,130,246,.08)',
             tension: 0.4,
             fill: true,
             borderWidth: 2,
@@ -141,7 +144,7 @@ export default function DashboardPage() {
           {
             label: 'Predicted',
             data: fitted,
-            borderColor: '#6b46c1',
+            borderColor: '#94a3b8',
             borderDash: [5, 4],
             tension: 0.4,
             fill: false,
@@ -170,171 +173,155 @@ export default function DashboardPage() {
     info:   'bg-blue-50 border-l-4 border-blue-400',
   };
 
-  return (
-    <div>
+  const kpiCards = [
+    {
+      label: 'Total sales (delivered)',
+      value: `₱${totalSales.toLocaleString()}`,
+      badge: `${weekChangePct >= 0 ? '+' : ''}${weekChangePct}% vs last week`,
+      badgeClass: weekChangePct >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700',
+    },
+    {
+      label: 'Outstanding debt',
+      value: `₱${totalDebt.toLocaleString()}`,
+      badge: 'Across walk-in accounts',
+      badgeClass: 'bg-red-50 text-red-700',
+      valueClass: totalDebt > 0 ? 'text-red-600' : 'text-ink',
+    },
+    {
+      label: 'Pending orders',
+      value: String(pendingOrders),
+      badge: pendingOrders > 0 ? 'Needs dispatch' : 'Queue clear',
+      badgeClass: pendingOrders > 0 ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600',
+    },
+    {
+      label: 'Available gallons',
+      value: String(availGallons),
+      badge: availGallons < 50 ? 'Low stock' : 'Healthy',
+      badgeClass: availGallons < 50 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700',
+    },
+  ];
 
-      {/* ── Welcome Banner ── */}
-      <div className="agua-dark-mesh mb-4 flex flex-col gap-4 rounded-[1.5rem] px-6 py-5 text-white shadow-xl shadow-slate-900/10 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-200/70">Operations</p>
-          <h2 className="mt-1 font-display text-xl font-bold tracking-tight">Welcome back, Admin</h2>
-          <p className="mt-0.5 text-xs text-white/55">Live pulse of sales, debt, and inventory.</p>
-        </div>
+  return (
+    <div className="space-y-5">
+      <PageHeader
+        title="Dashboard"
+        subtitle="Live pulse of sales, debt, inventory, and delivery activity."
+      >
         <button
           type="button"
           onClick={() => navigate('/reports')}
-          className="agua-btn agua-btn-primary cursor-pointer text-xs"
+          className="agua-btn agua-btn-primary !py-2 !text-xs"
         >
-          Generate Report
+          Generate report
         </button>
+      </PageHeader>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {kpiCards.map((k) => (
+          <div key={k.label} className="agua-card px-5 py-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">{k.label}</p>
+            <p className={`mt-2 font-display text-2xl font-bold tracking-tight ${k.valueClass || 'text-ink'}`}>
+              {k.value}
+            </p>
+            <span className={`mt-2 inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${k.badgeClass}`}>
+              {k.badge}
+            </span>
+          </div>
+        ))}
       </div>
 
-      {/* ── 4 Stat Cards ── */}
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-
-        <div className="agua-card p-4">
-          <div className="mb-1 text-xs text-muted">Total Sales (This Week)</div>
-          <div className="font-display text-[22px] font-bold text-ink">₱{totalSales}</div>
-          <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold
-            ${weekChangePct >= 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-            {weekChangePct >= 0 ? '+' : ''}{weekChangePct}% vs last week
-          </span>
-        </div>
-
-        <div className="agua-card p-4">
-          <div className="mb-1 text-xs text-muted">Outstanding Debt</div>
-          <div className="font-display text-[22px] font-bold text-ink">₱{totalDebt}</div>
-          <span className="mt-1 inline-block rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-800">
-            Needs attention
-          </span>
-        </div>
-
-        <div className="agua-card p-4">
-          <div className="mb-1 text-xs text-muted">Pending Orders</div>
-          <div className="font-display text-[22px] font-bold text-ink">{pendingOrders}</div>
-          <span className="mt-1 inline-block rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-800">
-            Active
-          </span>
-        </div>
-
-        <div className="agua-card p-4">
-          <div className="mb-1 text-xs text-muted">Available Gallons</div>
-          <div className="font-display text-[22px] font-bold text-ink">{availGallons}</div>
-          <span className={`inline-block text-[11px] px-2 py-0.5 rounded-full font-semibold mt-1
-            ${availGallons < 50 ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
-            {availGallons < 50 ? '⚠ Low Stock' : '✓ Good'}
-          </span>
-        </div>
-
-      </div>
-
-      {/* ── Chart + Alerts Row ── */}
-      <div className="grid grid-cols-[3fr_2fr] gap-3.5 mb-3.5">
-
-        {/* Sales Chart */}
-        <div className="agua-card p-4">
-          <div className="font-display text-[15px] font-bold">Sales Prediction vs Actual</div>
-          <div className="mb-3 mt-0.5 text-xs text-muted">Actual daily sales vs. this week's trend line, based on real orders</div>
-          <div className="relative h-[200px]">
+      <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+        <SectionCard
+          title="Sales: actual vs trend"
+          description="Daily delivered revenue vs. this week's trend line from real orders"
+          bodyClassName="px-5 pb-5 pt-4"
+        >
+          <div className="relative h-[220px]">
             <canvas ref={canvasRef} />
           </div>
-          <div className="flex gap-4 mt-2 text-xs text-gray-500">
-            <span>
-              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-accent mr-1" />
+          <div className="mt-3 flex gap-5 text-xs text-muted">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block h-2.5 w-2.5 rounded-sm bg-blue-500" />
               Actual
             </span>
-            <span>
-              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-purple-600 mr-1" />
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block h-2.5 w-2.5 rounded-sm border border-dashed border-slate-400 bg-slate-200" />
               Predicted
             </span>
           </div>
-        </div>
+        </SectionCard>
 
-        {/* System Alerts */}
-        <div className="agua-card p-4">
-          <div className="mb-3 font-display text-[15px] font-bold">System Alerts</div>
+        <SectionCard title="System alerts" description="Operational items that need a look" bodyClassName="px-5 pb-5 pt-2">
           {alerts.length === 0 ? (
-            <div className="text-center text-gray-400 text-xs py-6">No alerts 🎉</div>
+            <p className="py-8 text-center text-sm text-muted">All clear — no alerts right now.</p>
           ) : (
-            alerts.map((alert, i) => (
-              <div key={i} className={`flex gap-2.5 p-2.5 rounded-lg mb-2 text-[13px] ${alertStyle[alert.type]}`}>
-                <div>
-                  <div>{alert.msg}</div>
-                  <div className="text-[11px] text-gray-400 mt-0.5">Today</div>
-                </div>
-              </div>
-            ))
+            <ul className="space-y-2">
+              {alerts.map((alert, i) => (
+                <li key={i} className={`rounded-xl px-3 py-2.5 text-[13px] ${alertStyle[alert.type]}`}>
+                  <p className="font-medium text-ink">{alert.msg}</p>
+                  <p className="mt-0.5 text-[11px] text-muted">Today</p>
+                </li>
+              ))}
+            </ul>
           )}
-        </div>
-
+        </SectionCard>
       </div>
 
-      {/* ── Best Customers + Recent Orders Row ── */}
-      <div className="grid grid-cols-2 gap-3.5">
-
-        {/* Best Customers */}
-        <div className="agua-card p-4">
-          <div className="font-display text-[15px] font-bold">Best Customers</div>
-          <div className="mb-3 mt-0.5 text-xs text-muted">Ranked by total amount paid</div>
-          <table className="w-full text-[13px] border-collapse">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <SectionCard title="Best customers" description="Ranked by total amount paid" bodyClassName="overflow-x-auto">
+          <table className="w-full min-w-[320px] text-sm">
             <thead>
-              <tr>
-                {['#', 'Customer', 'Orders', 'Total Paid'].map(h => (
-                  <th key={h} className="text-left px-2.5 py-2 text-[11.5px] font-semibold text-gray-500 border-b-2 border-gray-100">
-                    {h}
-                  </th>
-                ))}
+              <tr className={TABLE_HEAD_ROW}>
+                <th className="px-5 py-3">#</th>
+                <th className="px-3 py-3">Customer</th>
+                <th className="px-3 py-3">Orders</th>
+                <th className="px-5 py-3">Total paid</th>
               </tr>
             </thead>
             <tbody>
               {bestCustomers.map((c, i) => (
-                <tr key={c.id} className="hover:bg-gray-50 border-b border-gray-100 last:border-b-0">
-                  <td className="px-2.5 py-2.5 text-gray-400 font-semibold">{i + 1}</td>
-                  <td className="px-2.5 py-2.5 font-medium">{c.fullName}</td>
-                  <td className="px-2.5 py-2.5 text-gray-500">{c.ordersCount}</td>
-                  <td className="px-2.5 py-2.5 font-semibold text-gray-700">
-                    ₱{c.totalPaid}
-                  </td>
+                <tr key={c.id} className={TABLE_BODY_ROW}>
+                  <td className="px-5 py-3.5 font-semibold text-slate-400">{i + 1}</td>
+                  <td className="px-3 py-3.5 font-semibold text-ink">{c.fullName}</td>
+                  <td className="px-3 py-3.5 text-muted">{c.ordersCount}</td>
+                  <td className="px-5 py-3.5 font-bold text-emerald-600">₱{c.totalPaid.toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        </SectionCard>
 
-        {/* Recent Orders */}
-        <div className="agua-card p-4">
-          <div className="text-[15px] font-bold mb-3">📦 Recent Orders</div>
-          <table className="w-full text-[13px] border-collapse">
+        <SectionCard title="Recent orders" description="Latest activity across the station" bodyClassName="overflow-x-auto">
+          <table className="w-full min-w-[320px] text-sm">
             <thead>
-              <tr>
-                {['Customer', 'Gallons', 'Amount', 'Status'].map(h => (
-                  <th key={h} className="text-left px-2.5 py-2 text-[11.5px] font-semibold text-gray-500 border-b-2 border-gray-100">
-                    {h}
-                  </th>
-                ))}
+              <tr className={TABLE_HEAD_ROW}>
+                <th className="px-5 py-3">Customer</th>
+                <th className="px-3 py-3">Gallons</th>
+                <th className="px-3 py-3">Amount</th>
+                <th className="px-5 py-3">Status</th>
               </tr>
             </thead>
             <tbody>
-              {recentOrders.map(o => {
-                // Orders from the customer portal use userId; admin-created orders use custId
+              {recentOrders.map((o) => {
                 const id = o.userId || o.custId;
                 const customer =
-                  (state.users     || []).find(u => String(u.id) === String(id)) ||
-                  (state.customers || []).find(c => String(c.id) === String(id));
+                  (state.users || []).find((u) => String(u.id) === String(id)) ||
+                  (state.customers || []).find((c) => String(c.id) === String(id));
                 return (
-                  <tr key={o.id} className="hover:bg-gray-50 border-b border-gray-100 last:border-b-0">
-                    <td className="px-2.5 py-2.5 font-medium">
-                      {customer?.fullName || '—'}
-                    </td>
-                    <td className="px-2.5 py-2.5 text-gray-500">{o.quantity ?? o.gallons ?? '—'}</td>
-                    <td className="px-2.5 py-2.5 font-semibold">₱{o.total ?? o.amount ?? '—'}</td>
-                    <td className="px-2.5 py-2.5">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11.5px] font-semibold
-                        ${o.status === 'Delivered'
-                          ? 'bg-green-100 text-green-800'
-                          : o.status === 'Cancelled'
-                          ? 'bg-red-100 text-red-800'
-                          : 'bg-yellow-100 text-yellow-800'}`}>
+                  <tr key={o.id} className={TABLE_BODY_ROW}>
+                    <td className="px-5 py-3.5 font-semibold text-ink">{customer?.fullName || '—'}</td>
+                    <td className="px-3 py-3.5 text-muted">{o.quantity ?? o.gallons ?? '—'}</td>
+                    <td className="px-3 py-3.5 font-bold text-ink">₱{o.total ?? o.amount ?? '—'}</td>
+                    <td className="px-5 py-3.5">
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+                          o.status === 'Delivered'
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : o.status === 'Cancelled'
+                              ? 'bg-red-50 text-red-700'
+                              : 'bg-amber-50 text-amber-800'
+                        }`}
+                      >
                         {o.status}
                       </span>
                     </td>
@@ -343,8 +330,7 @@ export default function DashboardPage() {
               })}
             </tbody>
           </table>
-        </div>
-
+        </SectionCard>
       </div>
     </div>
   );

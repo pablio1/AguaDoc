@@ -4,6 +4,10 @@ import { useApp } from '../context/AppContext';
 import Modal from '../components/ui/Modal';
 import { showToast } from '../components/ui/Toast';
 import { apiUpdateOrder, apiAddOrder, apiAssignRider } from '../api';
+import PageHeader from '../components/admin/PageHeader';
+import SectionCard from '../components/admin/SectionCard';
+import FilterPills from '../components/admin/FilterPills';
+import { TABLE_BODY_ROW, TABLE_HEAD_ROW } from '../components/admin/tableStyles';
 
 const PRICE = 40;
 
@@ -181,90 +185,74 @@ export default function OrdersPage() {
   const tabs = ['All', 'Unassigned', 'Pending', 'Assigned', 'Out for Delivery', 'Processing', 'Delivered', 'Cancelled', 'Delivery', 'Walk-in'];
 
   return (
-    <div>
-      <div className="agua-card p-4">
+    <div className="space-y-5">
+      <PageHeader
+        title="Order management"
+        subtitle={
+          <>
+            Assign riders, track fulfillment, and manage walk-in vs delivery orders.
+            {unassignedCount > 0 && (
+              <span className="ml-1 font-semibold text-amber-600">· {unassignedCount} unassigned</span>
+            )}
+          </>
+        }
+      >
+        <button
+          type="button"
+          onClick={() => setFilter('Unassigned')}
+          className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+        >
+          Unassigned ({unassignedCount})
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowRouteModal(true)}
+          className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-ink hover:bg-slate-50"
+        >
+          Smart routing
+        </button>
+        <button type="button" onClick={() => setShowOrderModal(true)} className="agua-btn agua-btn-primary !py-2 !text-xs">
+          New order
+        </button>
+      </PageHeader>
 
-        {/* Header */}
-        <div className="flex justify-between items-start mb-4 gap-3 flex-wrap">
-          <div>
-            <div className="text-[15px] font-bold">📋 Order Management</div>
-            <div className="text-xs text-gray-500 mt-0.5">
-              Assign riders to deliveries, track statuses.
-              {unassignedCount > 0 && (
-                <span className="ml-1 font-semibold text-amber-600">
-                  · {unassignedCount} unassigned
-                </span>
+      <FilterPills options={tabs} value={filter} onChange={setFilter} className="!mb-0" />
+
+      <SectionCard title="Orders" description={`${filtered.length} shown · filter: ${filter}`} bodyClassName="max-h-[540px] overflow-auto">
+        <table className="w-full min-w-[980px] text-sm">
+          <thead className="sticky top-0 z-10 bg-white">
+            <tr className={TABLE_HEAD_ROW}>
+              {['Order ID', 'Customer', 'Type', 'Gallons', 'Amount', 'Payment', 'Rider', 'Date', 'Status', 'Actions'].map(
+                (h) => (
+                  <th key={h} className={`whitespace-nowrap px-3 py-3 ${h === 'Order ID' ? 'pl-5' : ''} ${h === 'Actions' ? 'pr-5' : ''}`}>
+                    {h}
+                  </th>
+                )
               )}
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setFilter('Unassigned')}
-              className="border border-amber-300 bg-amber-50 text-amber-800 text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-amber-100 cursor-pointer"
-            >
-              🛵 Unassigned ({unassignedCount})
-            </button>
-            <button
-              onClick={() => setShowRouteModal(true)}
-              className="border border-gray-200 text-gray-700 text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-gray-50 cursor-pointer"
-            >
-              🚗 Smart Routing
-            </button>
-            <button
-              onClick={() => setShowOrderModal(true)}
-              className="bg-accent text-white text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-accent2 transition cursor-pointer"
-            >
-              + New Order
-            </button>
-          </div>
-        </div>
-
-        {/* Filter Tabs */}
-        <div className="flex gap-2 flex-wrap mb-3">
-          {tabs.map(tab => (
-            <button
-              key={tab}
-              onClick={() => setFilter(tab)}
-              className={`px-3 py-1 rounded-full text-xs font-semibold border transition cursor-pointer
-                ${filter === tab
-                  ? 'bg-accent text-white border-accent'
-                  : 'bg-white text-gray-500 border-gray-200 hover:border-accent hover:text-accent'}`}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-
-        {/* Orders Table — horizontal scroll so Actions / Assign stay reachable */}
-        <div className="max-h-[500px] overflow-auto border border-gray-100 rounded-lg">
-        <table className="w-full text-[13px] border-collapse min-w-[980px]">
-          <thead className="sticky top-0 bg-white z-10">
-            <tr>
-              {['Order ID', 'Customer', 'Type', 'Gallons', 'Amount', 'Payment', 'Rider', 'Date', 'Status', 'Actions'].map(h => (
-                <th key={h} className="text-left px-2.5 py-2 text-[11.5px] font-semibold text-gray-500 border-b-2 border-gray-200 whitespace-nowrap">
-                  {h}
-                </th>
-              ))}
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={10} className="text-center py-6 text-gray-400 text-xs">No orders found.</td></tr>
+              <tr>
+                <td colSpan={10} className="px-5 py-10 text-center text-sm text-muted">
+                  No orders match this filter.
+                </td>
+              </tr>
             ) : (
-              filtered.map(o => (
-                <tr key={o.id} className="hover:bg-gray-50 border-b border-gray-100 last:border-b-0">
-                  <td className="px-2.5 py-2.5 font-mono font-semibold text-gray-600">
+              filtered.map((o) => (
+                <tr key={o.id} className={TABLE_BODY_ROW}>
+                  <td className="px-5 py-3.5 font-mono text-xs font-semibold text-muted">
                     {o.ref || `#${String(o.id).slice(-6)}`}
                   </td>
-                  <td className="px-2.5 py-2.5 font-medium">{getCustomerName(o)}</td>
-                  <td className="px-2.5 py-2.5">
+                  <td className="px-3 py-3.5 font-semibold text-ink">{getCustomerName(o)}</td>
+                  <td className="px-3 py-3.5">
                     <span className={`inline-flex px-2 py-0.5 rounded-full text-[11.5px] font-semibold ${typeBadge[o.type] || 'bg-gray-100 text-gray-500'}`}>
                       {o.type}
                     </span>
                   </td>
-                  <td className="px-2.5 py-2.5 text-gray-600">{o.quantity ?? o.gallons ?? '—'}</td>
-                  <td className="px-2.5 py-2.5 font-semibold">₱{o.total ?? o.amount ?? '—'}</td>
-                  <td className="px-2.5 py-2.5">
+                  <td className="px-3 py-3.5 text-muted">{o.quantity ?? o.gallons ?? '—'}</td>
+                  <td className="px-3 py-3.5 font-bold text-ink">₱{o.total ?? o.amount ?? '—'}</td>
+                  <td className="px-3 py-3.5">
                     {o.paymentStatus === 'paid' ? (
                       <span className="inline-flex px-2 py-0.5 rounded-full text-[11.5px] font-semibold bg-green-100 text-green-800">
                         ✔ Paid (Xendit)
@@ -283,14 +271,14 @@ export default function OrdersPage() {
                       </span>
                     )}
                   </td>
-                  <td className="px-2.5 py-2.5 whitespace-nowrap">
+                  <td className="whitespace-nowrap px-3 py-3.5">
                     {getRiderName(o) ? (
                       <button
                         type="button"
                         onClick={() => canAssignRider(o) && openAssign(o)}
-                        className="inline-flex items-center gap-1 text-[12px] font-medium text-indigo-700 hover:underline cursor-pointer"
+                        className="cursor-pointer text-[12px] font-semibold text-blue-600 hover:underline"
                       >
-                        🛵 {getRiderName(o)}
+                        {getRiderName(o)}
                       </button>
                     ) : canAssignRider(o) ? (
                       <button
@@ -306,21 +294,21 @@ export default function OrdersPage() {
                       <span className="text-gray-300">—</span>
                     )}
                   </td>
-                  <td className="px-2.5 py-2.5 text-gray-500 whitespace-nowrap">
+                  <td className="whitespace-nowrap px-3 py-3.5 text-muted">
                     {o.date ? new Date(o.date).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                   </td>
-                  <td className="px-2.5 py-2.5">
-                    <span className={`inline-flex px-2 py-0.5 rounded-full text-[11.5px] font-semibold ${statusBadge[o.status] || 'bg-gray-100 text-gray-500'}`}>
+                  <td className="px-3 py-3.5">
+                    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${statusBadge[o.status] || 'bg-slate-100 text-slate-600'}`}>
                       {o.status}
                     </span>
                   </td>
-                  <td className="px-2.5 py-2.5 sticky right-0 bg-white shadow-[-6px_0_8px_rgba(0,0,0,0.04)]">
+                  <td className="sticky right-0 bg-white px-5 py-3.5 shadow-[-6px_0_8px_rgba(0,0,0,0.04)]">
                     <div className="flex gap-1 flex-wrap min-w-[150px]">
                       {canAssignRider(o) ? (
                         <button
                           type="button"
                           onClick={() => openAssign(o)}
-                          className="bg-indigo-600 text-white text-[11px] font-semibold px-2.5 py-1 rounded cursor-pointer hover:bg-indigo-700"
+                          className="cursor-pointer rounded-lg bg-blue-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-blue-700"
                         >
                           {o.riderId ? 'Reassign' : 'Assign'}
                         </button>
@@ -359,8 +347,7 @@ export default function OrdersPage() {
             )}
           </tbody>
         </table>
-        </div>
-      </div>
+      </SectionCard>
 
       {/* ── New Order Modal ── */}
       {showOrderModal && (
