@@ -19,7 +19,8 @@ INSERT INTO stock_items (id, name, category, stock, minAlert, unitPrice, unit) V
   ('stk-gal-square', 'Gallon Container (Square)',         'Containers',   20,   5, 220.00, 'units'),
   ('stk-ref-slim',   'Purified Water Refill (Slim/Round)','Water Refill', 350,  50,  25.00, 'units'),
   ('stk-ref-square', 'Purified Water Refill (Square)',    'Water Refill', 150,  30,  30.00, 'units'),
-  ('stk-caps',       'Bottle Caps & Sealing Plastics',    'Accessories',  800, 100,   5.00, 'units')
+  ('stk-caps',       'Bottle Caps',                       'Accessories',  500, 100,   5.00, 'units'),
+  ('stk-seals',      'Sealing Plastics',                  'Accessories',  300,  80,   3.00, 'units')
 ON DUPLICATE KEY UPDATE
   name = VALUES(name),
   category = VALUES(category),
