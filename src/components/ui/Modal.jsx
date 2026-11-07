@@ -1,24 +1,43 @@
 // src/components/ui/Modal.jsx
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
-export default function Modal({ title, onClose, children }) {
+export default function Modal({ title, onClose, children, wide = false }) {
   useEffect(() => {
-    const handler = (e) => { if (e.key === 'Escape') onClose(); };
+    const handler = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', handler);
+    };
   }, [onClose]);
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-navy/35 p-4 backdrop-blur-[2px]"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+      role="presentation"
     >
+      {/* Full-viewport dim + blur — sits above the entire app shell */}
+      <div
+        className="absolute inset-0 bg-slate-950/50 backdrop-blur-md"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
-        className="relative max-h-[90vh] w-full max-w-[460px] overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_24px_48px_rgba(15,23,42,0.12)]"
+        className={`relative z-[1] max-h-[90vh] w-full overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_24px_64px_rgba(15,23,42,0.28)] ${
+          wide ? 'max-w-2xl' : 'max-w-[460px]'
+        }`}
       >
         <h2 id="modal-title" className="pr-8 font-display text-lg font-bold tracking-tight text-ink">
           {title}
@@ -33,6 +52,7 @@ export default function Modal({ title, onClose, children }) {
         </button>
         <div className="mt-4">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

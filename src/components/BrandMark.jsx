@@ -16,7 +16,7 @@ export default function BrandMark({ size = 'md', light = false, iconOnly = false
       size === 'lg' ? 'h-14 w-14' : size === 'sm' ? 'h-9 w-9' : 'h-11 w-11';
     return (
       <img
-        src="/aguadoc-icon.png"
+        src="/aguadoc-icon.png?v=20261108"
         alt="AquaDoc"
         className={`${box} object-contain ${className}`}
         draggable={false}
@@ -26,7 +26,7 @@ export default function BrandMark({ size = 'md', light = false, iconOnly = false
 
   return (
     <img
-      src="/aguadoc-logo-ui.png"
+      src="/aguadoc-logo-ui.png?v=20261108"
       alt="AquaDoc Water Refilling Station"
       className={`${cfg.className} object-contain object-left ${className}`}
       draggable={false}

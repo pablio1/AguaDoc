@@ -6,7 +6,8 @@
 //
 // NOTE: this is a plain-language template, not legal advice. Edit TERMS_CONFIG to match how your
 // station really handles credit, and have your adviser (or a legal reviewer) check the final wording.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Modal from './ui/Modal';
 
 export const TERMS_VERSION = '1.0'; // bump this if you change the wording in a meaningful way
@@ -106,43 +107,55 @@ export function TermsModal({ onClose, onAccept, acceptLabel = 'I have read this'
 // ── Full-screen gate for existing accounts that never accepted the terms ──
 export function TermsGate({ onAccept, onDecline, loading }) {
   const [agreed, setAgreed] = useState(false);
-  return (
-    <div className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl w-full max-w-lg max-h-[92vh] flex flex-col">
-        <div className="p-5 border-b border-gray-100">
+
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-950/50 backdrop-blur-md" aria-hidden="true" />
+      <div className="relative z-[1] flex max-h-[92vh] w-full max-w-lg flex-col rounded-2xl bg-white shadow-[0_24px_64px_rgba(15,23,42,0.28)]">
+        <div className="border-b border-gray-100 p-5">
           <h2 className="text-base font-bold text-[#0f172a]">Terms & Agreement — Credit (Utang)</h2>
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="mt-1 text-xs text-gray-400">
             Please read this before continuing. It explains what happens when you take water on credit.
           </p>
         </div>
-        <div className="p-5 overflow-y-auto flex-1">
+        <div className="flex-1 overflow-y-auto p-5">
           <TermsContent />
         </div>
-        <div className="p-5 border-t border-gray-100 space-y-3">
-          <label className="flex items-start gap-2 text-xs text-gray-600 cursor-pointer">
+        <div className="space-y-3 border-t border-gray-100 p-5">
+          <label className="flex cursor-pointer items-start gap-2 text-xs text-gray-600">
             <input
               type="checkbox"
               checked={agreed}
-              onChange={e => setAgreed(e.target.checked)}
+              onChange={(e) => setAgreed(e.target.checked)}
               className="mt-0.5 accent-[#0ea5c9]"
             />
             <span>I have read and agree to these terms, including paying any balance I take on credit.</span>
           </label>
           <div className="flex items-center justify-between">
-            <button onClick={onDecline} className="text-xs text-gray-400 hover:text-red-500">
+            <button type="button" onClick={onDecline} className="text-xs text-gray-400 hover:text-red-500">
               Sign out instead
             </button>
             <button
+              type="button"
               onClick={onAccept}
               disabled={!agreed || loading}
-              className="bg-[#0ea5c9] hover:bg-[#0284a8] disabled:opacity-40 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition"
+              className="rounded-xl bg-[#0ea5c9] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#0284a8] disabled:opacity-40"
             >
               {loading ? 'Saving...' : 'Accept & Continue'}
             </button>
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

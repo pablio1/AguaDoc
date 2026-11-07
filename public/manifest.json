@@ -7,18 +7,18 @@
   "theme_color": "#003399",
   "icons": [
     {
-      "src": "/favicon.png",
+      "src": "/favicon.png?v=20261108",
       "sizes": "64x64",
       "type": "image/png"
     },
     {
-      "src": "/aguadoc-icon.png",
+      "src": "/aguadoc-icon.png?v=20261108",
       "sizes": "256x256",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/apple-touch-icon.png",
+      "src": "/apple-touch-icon.png?v=20261108",
       "sizes": "180x180",
       "type": "image/png"
     }
