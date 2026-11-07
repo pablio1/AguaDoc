@@ -24,27 +24,30 @@ export default function Sidebar({ onLogout }) {
 
   return (
     <aside className="flex h-screen w-[248px] min-w-[248px] flex-col bg-[#0f172a] text-white">
-      <div className="border-b border-white/10 px-4 py-4">
-        <BrandMark light size="sm" className="!max-w-[168px]" />
-        <p className="mt-2 text-[10px] font-medium uppercase tracking-[0.12em] text-slate-400">
-          Station Manager
-        </p>
+      <div className="border-b border-white/10 px-4 py-5">
+        <div className="flex items-center gap-3">
+          <BrandMark iconOnly size="sm" />
+          <div className="min-w-0">
+            <p className="truncate text-[15px] font-bold leading-tight text-white">AquaDoc</p>
+            <p className="text-[11px] font-medium text-slate-400">Station Manager</p>
+          </div>
+        </div>
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
         {navItems.map(({ path, icon: Icon, label }) => (
           <NavLink
             key={path}
             to={path}
             className={({ isActive }) =>
-              `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition ${
+              `group flex items-center gap-3 rounded-full px-3.5 py-2.5 text-[13px] font-medium transition ${
                 isActive
-                  ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/25'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                  ? 'bg-[#2563EB] text-white shadow-md shadow-blue-600/30'
+                  : 'text-slate-400 hover:bg-white/5 hover:text-slate-100'
               }`
             }
           >
-            <Icon size={16} className="shrink-0 opacity-90" />
+            <Icon size={17} className="shrink-0" strokeWidth={2} />
             <span className="flex-1">{label}</span>
             {path === '/notifications' && unread > 0 && (
               <span className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
@@ -59,19 +62,13 @@ export default function Sidebar({ onLogout }) {
         <button
           type="button"
           onClick={onLogout}
-          className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-[13px] font-medium text-slate-400 transition hover:bg-rose-500/15 hover:text-rose-200"
+          className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-[13px] font-medium text-slate-400 transition hover:bg-white/5 hover:text-white"
         >
           <LogOut size={15} /> Sign out
         </button>
-        <div className="flex items-center gap-3 rounded-2xl bg-white/5 px-3 py-3 ring-1 ring-white/10">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-500 text-[11px] font-bold text-white">
-            AD
-          </div>
-          <div className="min-w-0">
-            <p className="truncate text-xs font-semibold text-white">Admin</p>
-            <p className="truncate text-[11px] text-slate-400">Staff console</p>
-          </div>
-        </div>
+        <p className="px-1 text-center text-[10px] font-medium tracking-wide text-slate-500">
+          AquaDoc v2.9 • Enterprise
+        </p>
       </div>
     </aside>
   );

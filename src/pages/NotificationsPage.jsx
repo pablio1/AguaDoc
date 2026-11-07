@@ -79,7 +79,7 @@ export default function NotificationsPage() {
         title="Notifications"
         subtitle={
           <>
-            Alerts for orders, payments, debt, and inventory.
+            Station alerts for orders, payments, debt, and inventory.
             {unread > 0 && (
               <span className="ml-2 inline-flex rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700">
                 {unread} unread

@@ -130,7 +130,7 @@ export default function ReportsPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Reports & analytics" subtitle="Financial summaries and order-level transaction history.">
+      <PageHeader title="Sales Report" subtitle="Financial summaries, revenue trends, and order-level transaction history.">
         <button
           type="button"
           onClick={handleExportCSV}

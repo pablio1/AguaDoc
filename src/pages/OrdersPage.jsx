@@ -9,7 +9,7 @@ import SectionCard from '../components/admin/SectionCard';
 import FilterPills from '../components/admin/FilterPills';
 import { TABLE_BODY_ROW, TABLE_HEAD_ROW } from '../components/admin/tableStyles';
 import EmptyState from '../components/admin/EmptyState';
-import { ClipboardList, MapPin, Trash2 } from 'lucide-react';
+import { ClipboardList, MapPin, Plus, Trash2 } from 'lucide-react';
 import { formatMoney } from '../lib/money';
 
 const PRICE = 40;
@@ -134,6 +134,73 @@ export default function OrdersPage() {
     return !isWalkinOrder(o);
   }
 
+  function getCustomerAddress(o) {
+    if (o.address) return o.address;
+    const id = o.userId || o.custId;
+    if (!id) return '';
+    const user = (state.users || []).find((u) => String(u.id) === String(id));
+    if (user?.address) return user.address;
+    const customer = (state.customers || []).find((c) => String(c.id) === String(id));
+    return customer?.address || '';
+  }
+
+  function orderItemsText(o) {
+    const qty = o.quantity ?? o.gallons ?? 1;
+    const walk = isWalkinOrder(o);
+    if (walk) return `Gallon Refill x ${qty}`;
+    return `Water Delivery x ${qty} gal`;
+  }
+
+  async function handleInlineAssign(o, riderId) {
+    if (!riderId || String(riderId) === String(o.riderId)) return;
+    try {
+      const updated = await apiAssignRider(o.id, riderId);
+      dispatch({ type: 'UPDATE_ORDER', payload: updated });
+      const name = riders.find((r) => String(r.id) === String(riderId))?.fullName || 'rider';
+      showToast(`🛵 Assigned ${o.ref || o.id} to ${name}`);
+    } catch (e) {
+      showToast(`❌ ${e.message || 'Failed to assign rider.'}`);
+    }
+  }
+
+  function paymentCell(o) {
+    if (o.paymentStatus === 'paid') {
+      const ref = o.checkoutSessionId ? String(o.checkoutSessionId).slice(-8) : null;
+      return (
+        <div>
+          <p className="text-xs font-medium text-ink">Online Payment (GCash/Maya)</p>
+          {ref && <p className="mt-0.5 text-[10px] font-semibold text-violet-600">Ref: GC-{ref}</p>}
+        </div>
+      );
+    }
+    if (o.checkoutSessionId) {
+      return (
+        <span className="inline-flex rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800">
+          Awaiting payment
+        </span>
+      );
+    }
+    if (o.payMethod === 'Cash on Delivery') {
+      return (
+        <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700">
+          Cash on Delivery (COD)
+        </span>
+      );
+    }
+    if (isWalkinOrder(o)) {
+      return (
+        <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600">
+          Walk-in / Utang
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600">
+        {o.payMethod || 'Pay on arrival'}
+      </span>
+    );
+  }
+
   function canAssignRider(o) {
     // Any non-walk-in order that is still open can be assigned a rider
     return isDeliveryOrder(o) && !['Delivered', 'Cancelled', 'Ready to Go'].includes(o.status);
@@ -179,84 +246,68 @@ export default function OrdersPage() {
     Pending: 'bg-amber-50 text-amber-800',
   };
 
-  const typeBadge = {
-    Delivery: 'bg-blue-50 text-blue-700',
-    'Walk-in / Pickup': 'bg-slate-100 text-slate-600',
-    'Walk-in': 'bg-slate-100 text-slate-600',
-  };
-
-  const orderCount = (state.orders || []).length;
-  const pendingCount = (state.orders || []).filter((o) => o.status === 'Pending').length;
-  const deliveredCount = (state.orders || []).filter((o) => o.status === 'Delivered').length;
-
   const tabs = ['All', 'Unassigned', 'Pending', 'Assigned', 'Out for Delivery', 'Processing', 'Delivered', 'Cancelled', 'Delivery', 'Walk-in'];
 
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Order management"
-        subtitle={
-          <>
-            Assign riders, track fulfillment, and manage walk-in vs delivery orders.
-            {unassignedCount > 0 && (
-              <span className="ml-1 font-semibold text-amber-600">· {unassignedCount} unassigned</span>
-            )}
-          </>
-        }
+        title="Orders & Dispatch"
+        subtitle="Manage incoming customer orders, assign riders, and fulfill water dispatches."
       >
-        <button
-          type="button"
-          onClick={() => setFilter('Unassigned')}
-          className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-100"
-        >
-          Unassigned ({unassignedCount})
-        </button>
+        {unassignedCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setFilter('Unassigned')}
+            className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+          >
+            Unassigned ({unassignedCount})
+          </button>
+        )}
         <button
           type="button"
           onClick={() => setShowRouteModal(true)}
-          className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-ink hover:bg-slate-50"
+          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-ink hover:bg-slate-50"
         >
           Smart routing
         </button>
-        <button type="button" onClick={() => setShowOrderModal(true)} className="agua-btn agua-btn-primary !py-2 !text-xs">
-          New order
+        <button
+          type="button"
+          onClick={() => setShowOrderModal(true)}
+          className="agua-btn agua-btn-primary !gap-1.5 !py-2.5 !text-sm"
+        >
+          <Plus size={16} /> New Order
         </button>
       </PageHeader>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="agua-card px-5 py-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">All orders</p>
-          <p className="mt-2 font-display text-2xl font-bold text-ink">{orderCount}</p>
-        </div>
-        <div className="agua-card px-5 py-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">Pending</p>
-          <p className="mt-2 font-display text-2xl font-bold text-amber-700">{pendingCount}</p>
-        </div>
-        <div className="agua-card px-5 py-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">Delivered</p>
-          <p className="mt-2 font-display text-2xl font-bold text-emerald-600">{deliveredCount}</p>
-        </div>
-      </div>
-
       <FilterPills options={tabs} value={filter} onChange={setFilter} className="!mb-0" />
 
-      <SectionCard title="Orders" description={`${filtered.length} shown · filter: ${filter}`} bodyClassName="max-h-[540px] overflow-auto">
-        <table className="w-full min-w-[980px] text-sm">
+      <SectionCard title="Incoming & Active Orders" bodyClassName="max-h-[560px] overflow-auto">
+        <table className="w-full min-w-[1080px] text-sm">
           <thead className="sticky top-0 z-10 bg-white">
             <tr className={TABLE_HEAD_ROW}>
-              {['Order ID', 'Customer', 'Type', 'Gallons', 'Amount', 'Payment', 'Rider', 'Date', 'Status', 'Actions'].map(
-                (h) => (
-                  <th key={h} className={`whitespace-nowrap px-3 py-3 ${h === 'Order ID' ? 'pl-5' : ''} ${h === 'Actions' ? 'pr-5' : ''}`}>
-                    {h}
-                  </th>
-                )
-              )}
+              {[
+                'Order ID',
+                'Customer & Address',
+                'Items Ordered',
+                'Total Amount',
+                'Payment',
+                'Assign Rider',
+                'Status',
+                'Action',
+              ].map((h) => (
+                <th
+                  key={h}
+                  className={`whitespace-nowrap px-3 py-3 ${h === 'Order ID' ? 'pl-5' : ''} ${h === 'Action' ? 'pr-5' : ''}`}
+                >
+                  {h}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={10}>
+                <td colSpan={8}>
                   <EmptyState
                     icon={ClipboardList}
                     title="No orders match this filter"
@@ -265,112 +316,97 @@ export default function OrdersPage() {
                 </td>
               </tr>
             ) : (
-              filtered.map((o) => (
-                <tr key={o.id} className={TABLE_BODY_ROW}>
-                  <td className="px-5 py-3.5 font-mono text-xs font-semibold text-muted">
-                    {o.ref || `#${String(o.id).slice(-6)}`}
-                  </td>
-                  <td className="px-3 py-3.5 font-semibold text-ink">{getCustomerName(o)}</td>
-                  <td className="px-3 py-3.5">
-                    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${typeBadge[o.type] || 'bg-slate-100 text-slate-600'}`}>
-                      {o.type}
-                    </span>
-                  </td>
-                  <td className="px-3 py-3.5 text-muted">{o.quantity ?? o.gallons ?? '—'}</td>
-                  <td className="px-3 py-3.5 font-bold text-ink">{formatMoney(o.total ?? o.amount)}</td>
-                  <td className="px-3 py-3.5">
-                    {o.paymentStatus === 'paid' ? (
-                      <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
-                        Paid (Xendit)
-                      </span>
-                    ) : o.checkoutSessionId ? (
-                      <span className="inline-flex rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800">
-                        Awaiting payment
-                      </span>
-                    ) : o.payMethod === 'Cash on Delivery' ? (
-                      <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700">
-                        Cash on delivery
-                      </span>
-                    ) : (
-                      <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600">
-                        Pay on arrival
-                      </span>
-                    )}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-3.5">
-                    {getRiderName(o) ? (
-                      <button
-                        type="button"
-                        onClick={() => canAssignRider(o) && openAssign(o)}
-                        className="cursor-pointer text-[12px] font-semibold text-blue-600 hover:underline"
-                      >
-                        {getRiderName(o)}
-                      </button>
-                    ) : canAssignRider(o) ? (
-                      <button
-                        type="button"
-                        onClick={() => openAssign(o)}
-                        className="text-[11.5px] text-amber-700 font-semibold bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full hover:bg-amber-100 cursor-pointer"
-                      >
-                        Unassigned — Assign
-                      </button>
-                    ) : isDeliveryOrder(o) ? (
-                      <span className="text-[11.5px] text-amber-600 font-semibold">Unassigned</span>
-                    ) : (
-                      <span className="text-slate-300">—</span>
-                    )}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-3.5 text-muted">
-                    {o.date ? new Date(o.date).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
-                  </td>
-                  <td className="px-3 py-3.5">
-                    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${statusBadge[o.status] || 'bg-slate-100 text-slate-600'}`}>
-                      {o.status}
-                    </span>
-                  </td>
-                  <td className="sticky right-0 bg-white px-5 py-3.5 shadow-[-6px_0_8px_rgba(0,0,0,0.04)]">
-                    <div className="flex gap-1 flex-wrap min-w-[150px]">
-                      {canAssignRider(o) ? (
-                        <button
-                          type="button"
-                          onClick={() => openAssign(o)}
-                          className="cursor-pointer rounded-lg bg-blue-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-blue-700"
-                        >
-                          {o.riderId ? 'Reassign' : 'Assign'}
-                        </button>
+              filtered.map((o) => {
+                const completed = o.status === 'Delivered' || o.status === 'Ready to Go';
+                return (
+                  <tr key={o.id} className={TABLE_BODY_ROW}>
+                    <td className="px-5 py-3.5 font-semibold text-ink">
+                      {o.ref || `ORD-${String(o.id).slice(-6)}`}
+                    </td>
+                    <td className="max-w-[200px] px-3 py-3.5">
+                      <p className="font-semibold text-ink">{getCustomerName(o)}</p>
+                      {getCustomerAddress(o) ? (
+                        <p className="mt-0.5 line-clamp-2 text-[11px] text-muted">{getCustomerAddress(o)}</p>
                       ) : null}
-                      {o.status === 'Pending' && (
-                        <button
-                          type="button"
-                          onClick={() => handleMarkProcessing(o)}
-                          className="cursor-pointer rounded-lg bg-blue-600 px-2.5 py-1 text-[11px] font-semibold text-white transition hover:bg-blue-700"
+                    </td>
+                    <td className="px-3 py-3.5 text-xs text-muted">{orderItemsText(o)}</td>
+                    <td className="px-3 py-3.5 font-bold text-ink">{formatMoney(o.total ?? o.amount)}</td>
+                    <td className="px-3 py-3.5">{paymentCell(o)}</td>
+                    <td className="px-3 py-3.5">
+                      {canAssignRider(o) ? (
+                        <select
+                          className="max-w-[140px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-medium text-ink"
+                          value={o.riderId || ''}
+                          onChange={(e) => handleInlineAssign(o, e.target.value)}
                         >
-                          Process
-                        </button>
+                          <option value="">Select rider</option>
+                          {riders.map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {r.fullName || r.username}
+                            </option>
+                          ))}
+                        </select>
+                      ) : getRiderName(o) ? (
+                        <span className="text-xs font-semibold text-ink">{getRiderName(o)}</span>
+                      ) : (
+                        <span className="text-slate-300">—</span>
                       )}
-                      {(o.status === 'Processing' || o.status === 'Assigned' || o.status === 'Out for Delivery') && (
-                        <button
-                          type="button"
-                          onClick={() => handleMarkDone(o)}
-                          className="cursor-pointer rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white transition hover:bg-emerald-700"
-                        >
-                          Done
-                        </button>
+                    </td>
+                    <td className="px-3 py-3.5">
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+                          completed
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : statusBadge[o.status] || 'bg-amber-50 text-amber-800'
+                        }`}
+                      >
+                        {completed ? 'Completed' : o.status}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      {completed ? (
+                        <span className="text-xs font-semibold text-emerald-600">Done</span>
+                      ) : o.status === 'Cancelled' ? (
+                        <span className="text-xs text-muted">Cancelled</span>
+                      ) : (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {(o.status === 'Processing' ||
+                            o.status === 'Assigned' ||
+                            o.status === 'Out for Delivery' ||
+                            o.status === 'Pending') && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                o.status === 'Pending' ? handleMarkProcessing(o) : handleMarkDone(o)
+                              }
+                              className="rounded-lg bg-blue-600 px-3 py-1 text-[11px] font-semibold text-white hover:bg-blue-700"
+                            >
+                              {o.status === 'Pending' ? 'Process' : 'Complete'}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => openAssign(o)}
+                            className="text-[11px] font-semibold text-slate-500 hover:text-ink"
+                          >
+                            Details
+                          </button>
+                          {!['Delivered', 'Ready to Go', 'Cancelled'].includes(o.status) && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteOrder(o)}
+                              className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                              aria-label="Cancel order"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
                       )}
-                      {!['Delivered', 'Ready to Go', 'Cancelled'].includes(o.status) && (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteOrder(o)}
-                          className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
-                          aria-label="Cancel order"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

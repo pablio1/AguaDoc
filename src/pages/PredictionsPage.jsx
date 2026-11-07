@@ -134,7 +134,7 @@ export default function PredictionsPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Predictions"
+        title="AI Predictions"
         subtitle={`Forecasts from the last ${HISTORY_DAYS} days of delivered orders (moving average + trend line).`}
       />
 

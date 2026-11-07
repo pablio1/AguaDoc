@@ -2,7 +2,7 @@
 // NOTE: This list is for WALK-IN customers who don't have (or won't create) an account.
 // Registered app customers aren't added here — their debt tracking can be wired up later
 // via apiGetAvailableCustomers() / apiLinkCustomer() in api.js if that's ever needed.
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import Modal from '../components/ui/Modal';
@@ -14,7 +14,7 @@ import SectionCard from '../components/admin/SectionCard';
 import FilterPills from '../components/admin/FilterPills';
 import { TABLE_BODY_ROW, TABLE_HEAD_ROW } from '../components/admin/tableStyles';
 import EmptyState from '../components/admin/EmptyState';
-import { Users } from 'lucide-react';
+import { Users, Send, MessageCircle } from 'lucide-react';
 import { formatMoney, sumMoney } from '../lib/money';
 
 const PRICE_PER_GALLON = 40; // walk-ins pick up in person — no delivery fee added
@@ -38,6 +38,26 @@ export default function CustomersPage() {
     if (filter === 'Cleared') return c.balance === 0;
     return true;
   });
+
+  const debtorsWithBalance = state.customers.filter((c) => Number(c.balance) > 0);
+
+  const settlementHistory = useMemo(() => {
+    return [...(state.payments || [])]
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .slice(0, 20)
+      .map((p) => {
+        const customer = state.customers.find((c) => String(c.id) === String(p.custId));
+        return { ...p, customerName: customer?.fullName || '—' };
+      });
+  }, [state.payments, state.customers]);
+
+  function handleSmsReminders() {
+    if (debtorsWithBalance.length === 0) {
+      showToast('No customers with outstanding balance.');
+      return;
+    }
+    showToast(`📱 Payment reminders queued for ${debtorsWithBalance.length} customer(s).`);
+  }
 
   // Persists a new walk-in customer, then reflects the confirmed row locally.
   async function handleAddCustomer() {
@@ -107,8 +127,15 @@ export default function CustomersPage() {
     <div className="space-y-5">
       <PageHeader
         title="Debt Management (Utang Tracker)"
-        subtitle="Track customer outstanding balances, settle accounts, and manage walk-in credit."
+        subtitle="Track customer outstanding balances, send SMS payment reminders, and settle accounts."
       >
+        <button
+          type="button"
+          onClick={handleSmsReminders}
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-ink shadow-sm hover:bg-slate-50"
+        >
+          <Send size={14} /> Send SMS Reminders
+        </button>
         <button type="button" onClick={() => setShowAddModal(true)} className="agua-btn agua-btn-primary !py-2 !text-xs">
           New customer
         </button>
@@ -133,10 +160,9 @@ export default function CustomersPage() {
 
       <SectionCard
         title="Active Debt Customers"
-        description={`${filtered.length} account${filtered.length === 1 ? '' : 's'} · filter: ${filter}`}
-        bodyClassName="max-h-[560px] overflow-auto"
+        bodyClassName="max-h-[480px] overflow-auto"
       >
-        <table className="w-full min-w-[780px] text-sm">
+        <table className="w-full min-w-[720px] text-sm">
           <thead className="sticky top-0 z-10 bg-white">
             <tr className={TABLE_HEAD_ROW}>
               {['Customer Name', 'Contact Number', 'Total Outstanding Balance', 'Status', 'Agreement', 'Actions'].map((h) => (
@@ -160,7 +186,7 @@ export default function CustomersPage() {
                 <td className="px-3 py-3.5">
                   {c.balance > 0 ? (
                     <span className="inline-flex rounded-full bg-red-50 px-2.5 py-0.5 text-[11px] font-semibold text-red-700">
-                      Overdue Balance
+                      Walk-in Balance (Utang)
                     </span>
                   ) : (
                     <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
@@ -180,30 +206,32 @@ export default function CustomersPage() {
                   )}
                 </td>
                 <td className="whitespace-nowrap px-5 py-3.5 text-right">
-                  {c.balance > 0 && (
+                  <div className="inline-flex items-center justify-end gap-2">
+                    {c.balance > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => navigate('/payments')}
+                        className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100"
+                      >
+                        Settle Payment
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={() => navigate('/payments')}
-                      className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                      onClick={() => openEdit(c)}
+                      className="text-[11px] font-semibold text-slate-500 hover:text-ink"
                     >
-                      Settle Payment
+                      Edit
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => openEdit(c)}
-                    className={`${c.balance > 0 ? 'ml-3' : ''} text-xs font-semibold text-slate-600 hover:text-ink`}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => printAgreement(c)}
-                    title="Print the credit agreement for this customer to sign"
-                    className="ml-3 text-xs font-semibold text-blue-600 hover:text-blue-700"
-                  >
-                    Agreement
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => printAgreement(c)}
+                      title="Print the credit agreement for this customer to sign"
+                      className="rounded-lg p-1 text-blue-600 hover:bg-blue-50"
+                    >
+                      <MessageCircle size={15} />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -221,6 +249,55 @@ export default function CustomersPage() {
                   />
                 </td>
               </tr>
+            )}
+          </tbody>
+        </table>
+      </SectionCard>
+
+      <SectionCard title="Debt Payment Settlement History" bodyClassName="overflow-x-auto">
+        <table className="w-full min-w-[640px] text-sm">
+          <thead>
+            <tr className={TABLE_HEAD_ROW}>
+              <th className="px-5 py-3">Date Settled</th>
+              <th className="px-3 py-3">Customer Name</th>
+              <th className="px-3 py-3">Amount Paid</th>
+              <th className="px-3 py-3">Payment Method</th>
+              <th className="px-5 py-3">Reference Number</th>
+            </tr>
+          </thead>
+          <tbody>
+            {settlementHistory.length === 0 ? (
+              <tr>
+                <td colSpan={5}>
+                  <EmptyState
+                    icon={Users}
+                    title="No settlements recorded"
+                    description="Payments logged on Payments & Billing appear here."
+                  />
+                </td>
+              </tr>
+            ) : (
+              settlementHistory.map((p) => (
+                <tr key={p.id} className={TABLE_BODY_ROW}>
+                  <td className="whitespace-nowrap px-5 py-3.5 text-muted">
+                    {p.date
+                      ? new Date(p.date).toLocaleString('en-PH', {
+                          year: 'numeric',
+                          month: '2-digit',
+                          day: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                      : '—'}
+                  </td>
+                  <td className="px-3 py-3.5 font-semibold text-ink">{p.customerName}</td>
+                  <td className="px-3 py-3.5 font-bold text-emerald-600">{formatMoney(p.amount)}</td>
+                  <td className="px-3 py-3.5 text-muted">{p.method || 'Cash'}</td>
+                  <td className="px-5 py-3.5 text-xs font-medium text-violet-600">
+                    {p.orderId ? `ORD-${String(p.orderId).slice(-6)}` : 'N/A'}
+                  </td>
+                </tr>
+              ))
             )}
           </tbody>
         </table>

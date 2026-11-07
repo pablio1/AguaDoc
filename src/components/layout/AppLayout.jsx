@@ -8,7 +8,7 @@ export default function AppLayout({ children, onLogout }) {
       <Sidebar onLogout={onLogout} />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <Topbar />
-        <main className="flex-1 overflow-y-auto bg-[#f5f7fa] p-5 sm:p-6">
+        <main className="flex-1 overflow-y-auto bg-[#F8F9FB] p-5 sm:p-6">
           <div className="agua-fade-up mx-auto max-w-[1400px]">
             {children}
           </div>

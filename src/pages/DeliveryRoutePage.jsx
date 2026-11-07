@@ -117,7 +117,7 @@ export default function DeliveryRoutePage() {
 
   return (
     <div className="flex h-[calc(100dvh-7.5rem)] min-h-[480px] flex-col gap-4">
-      <PageHeader title="Delivery route" subtitle="Optimized stops for pending deliveries with mapped addresses.">
+      <PageHeader title="Live Delivery Map" subtitle="Optimized stops for pending deliveries with mapped addresses.">
         <button type="button" onClick={load} className="agua-btn agua-btn-primary !py-2 !text-xs">
           Refresh route
         </button>

@@ -121,7 +121,7 @@ export default function InventoryPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Inventory & stocks"
+        title="Inventory & Stocks"
         subtitle={
           <>
             Monitor gallon supplies, caps, seals, and equipment restock history.
@@ -137,14 +137,14 @@ export default function InventoryPage() {
           type="button"
           onClick={() => stockItems[0] && openRestock(stockItems[0])}
           disabled={!stockItems.length}
-          className="agua-btn agua-btn-primary inline-flex items-center gap-2 !py-2.5 !text-sm disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-emerald-500/25 transition hover:bg-emerald-600 disabled:opacity-50"
         >
-          <Plus size={16} /> Restock item
+          <Plus size={16} /> Restock Item
         </button>
       </PageHeader>
 
       {/* Summary cards — clean white cards, category / name / qty / icon */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {stockItems.length === 0 ? (
           <div className="agua-card col-span-full">
             <EmptyState
@@ -194,9 +194,7 @@ export default function InventoryPage() {
       </div>
 
       <SectionCard
-        title="Stock inventory"
-        description="Current counts, alert thresholds, and unit prices"
-        action={<Package size={18} className="text-slate-300" />}
+        title="Stock Inventory Table"
         bodyClassName="overflow-x-auto"
       >
           <table className="w-full min-w-[780px] text-sm">
@@ -240,7 +238,7 @@ export default function InventoryPage() {
                         <button
                           type="button"
                           onClick={() => openRestock(item)}
-                          className="rounded-full bg-blue-50 px-3.5 py-1.5 text-[12px] font-semibold text-blue-700 transition hover:bg-blue-100"
+                          className="rounded-full bg-emerald-50 px-3.5 py-1.5 text-[12px] font-semibold text-emerald-700 transition hover:bg-emerald-100"
                         >
                           Restock
                         </button>
