@@ -154,7 +154,7 @@ export default function CustomersPage() {
 
       <SectionCard
         title="Active Debt Customers"
-        bodyClassName="max-h-[480px] overflow-auto"
+        bodyClassName="max-h-[480px] overflow-x-auto overflow-y-auto"
       >
         <table className="w-full min-w-[720px] text-sm">
           <thead className="sticky top-0 z-10 bg-white">

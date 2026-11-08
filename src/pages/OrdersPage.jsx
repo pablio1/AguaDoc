@@ -281,7 +281,7 @@ export default function OrdersPage() {
 
       <FilterPills options={tabs} value={filter} onChange={setFilter} className="!mb-0" />
 
-      <SectionCard title="Incoming & Active Orders" bodyClassName="max-h-[560px] overflow-auto">
+      <SectionCard title="Incoming & Active Orders" bodyClassName="max-h-[560px] overflow-x-auto overflow-y-auto">
         <table className="w-full min-w-[1080px] text-sm">
           <thead className="sticky top-0 z-10 bg-white">
             <tr className={TABLE_HEAD_ROW}>

@@ -133,7 +133,7 @@ export default function PaymentsPage() {
         <SectionCard
           title="Debt Payment Settlement History"
           description={`${state.payments.length} settlement${state.payments.length === 1 ? '' : 's'} recorded`}
-          bodyClassName="max-h-[400px] overflow-auto"
+          bodyClassName="max-h-[400px] overflow-x-auto overflow-y-auto"
         >
           <table className="w-full min-w-[520px] text-sm">
             <thead className="sticky top-0 z-10 bg-white">

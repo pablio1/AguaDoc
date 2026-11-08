@@ -7,17 +7,8 @@ import {
   Lock,
   ArrowRight,
   ArrowLeft,
-  Shield,
-  Truck,
-  Users,
 } from 'lucide-react';
 import AuthShell from '../components/AuthShell';
-
-const ROLE_HINTS = [
-  { icon: Shield, label: 'Admin', hint: 'Station Manager' },
-  { icon: Truck, label: 'Rider', hint: 'Deliveries' },
-  { icon: Users, label: 'Customer', hint: 'Orders & tracking' },
-];
 
 export default function LoginPage({ onLogin, onGoRegister, onGoLanding }) {
   const [username, setUsername] = useState('');
@@ -61,19 +52,6 @@ export default function LoginPage({ onLogin, onGoRegister, onGoLanding }) {
           <ArrowLeft size={13} /> Back to home
         </button>
       )}
-
-      <div className="mb-5 grid grid-cols-3 gap-2">
-        {ROLE_HINTS.map(({ icon: Icon, label, hint }) => (
-          <div
-            key={label}
-            className="rounded-xl border border-slate-100 bg-slate-50/80 px-2 py-2.5 text-center"
-          >
-            <Icon size={14} className="mx-auto text-sky-600" strokeWidth={2.25} />
-            <p className="mt-1.5 text-[11px] font-bold text-ink">{label}</p>
-            <p className="text-[10px] text-muted">{hint}</p>
-          </div>
-        ))}
-      </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
