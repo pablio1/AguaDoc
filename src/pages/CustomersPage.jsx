@@ -39,8 +39,6 @@ export default function CustomersPage() {
     return true;
   });
 
-  const debtorsWithBalance = state.customers.filter((c) => Number(c.balance) > 0);
-
   const settlementHistory = useMemo(() => {
     return [...(state.payments || [])]
       .sort((a, b) => new Date(b.date) - new Date(a.date))
@@ -52,11 +50,7 @@ export default function CustomersPage() {
   }, [state.payments, state.customers]);
 
   function handleSmsReminders() {
-    if (debtorsWithBalance.length === 0) {
-      showToast('No customers with outstanding balance.');
-      return;
-    }
-    showToast(`📱 Payment reminders queued for ${debtorsWithBalance.length} customer(s).`);
+    navigate('/sms');
   }
 
   // Persists a new walk-in customer, then reflects the confirmed row locally.

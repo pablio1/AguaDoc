@@ -1004,6 +1004,238 @@ app.delete('/api/containers/:id', async (req, res) => {
   res.json({ success: true });
 });
 
+// ── SMS (Semaphore) ──
+// Docs: POST https://api.semaphore.co/api/v4/messages
+const SEMAPHORE_API_URL = 'https://api.semaphore.co/api/v4/messages';
+const SEMAPHORE_ACCOUNT_URL = 'https://api.semaphore.co/api/v4/account';
+const PENDING_DELIVERY_STATUSES = [
+  'Pending',
+  'Assigned',
+  'Accepted',
+  'Processing',
+  'Out for Delivery',
+];
+
+/** Normalize PH mobile numbers for Semaphore (09XXXXXXXXX or 639XXXXXXXXX). */
+function normalizePhMobile(raw) {
+  if (!raw) return null;
+  let digits = String(raw).replace(/\D/g, '');
+  if (digits.startsWith('630') && digits.length === 12) digits = `0${digits.slice(2)}`;
+  if (digits.startsWith('63') && digits.length === 12) digits = `0${digits.slice(2)}`;
+  if (digits.length === 10 && digits.startsWith('9')) digits = `0${digits}`;
+  if (/^09\d{9}$/.test(digits)) return digits;
+  if (/^639\d{9}$/.test(digits)) return digits;
+  return null;
+}
+
+function personalizeSms(template, { name, status, ref, address } = {}) {
+  return String(template || '')
+    .replace(/\[Name\]/gi, name || 'Customer')
+    .replace(/\[Status\]/gi, status || '')
+    .replace(/\[Order\]/gi, ref || '')
+    .replace(/\[Address\]/gi, address || '');
+}
+
+async function fetchPendingDeliveryRecipients() {
+  const placeholders = PENDING_DELIVERY_STATUSES.map(() => '?').join(', ');
+  const [rows] = await pool.query(
+    `SELECT
+       o.id AS orderId,
+       o.ref,
+       o.status,
+       o.type,
+       o.quantity,
+       o.total,
+       o.address,
+       o.date,
+       o.userId,
+       COALESCE(u.fullName, c.fullName, 'Customer') AS customerName,
+       COALESCE(NULLIF(TRIM(u.phone), ''), NULLIF(TRIM(c.phone), '')) AS phone
+     FROM orders o
+     LEFT JOIN users u ON u.id = o.userId
+     LEFT JOIN customers c ON c.id = o.userId
+     WHERE o.status IN (${placeholders})
+     ORDER BY o.date DESC`,
+    PENDING_DELIVERY_STATUSES
+  );
+
+  return rows.map((row) => {
+    const normalizedPhone = normalizePhMobile(row.phone);
+    return {
+      ...row,
+      phone: row.phone || null,
+      normalizedPhone,
+      canSms: Boolean(normalizedPhone),
+    };
+  });
+}
+
+async function sendSemaphoreSms({ number, message }) {
+  const apikey = process.env.SEMAPHORE_API_KEY;
+  if (!apikey || apikey.includes('your_')) {
+    const err = new Error('SEMAPHORE_API_KEY is not configured on the server.');
+    err.code = 'SMS_NOT_CONFIGURED';
+    throw err;
+  }
+
+  const body = new URLSearchParams();
+  body.set('apikey', apikey);
+  body.set('number', number);
+  body.set('message', message);
+  if (process.env.SEMAPHORE_SENDER_NAME) {
+    body.set('sendername', process.env.SEMAPHORE_SENDER_NAME);
+  }
+
+  const resp = await fetch(SEMAPHORE_API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+  const data = await resp.json().catch(() => null);
+  if (!resp.ok) {
+    const msg =
+      (Array.isArray(data) && data[0]?.message) ||
+      data?.message ||
+      `Semaphore request failed (${resp.status})`;
+    const err = new Error(msg);
+    err.details = data;
+    throw err;
+  }
+  return data;
+}
+
+app.get('/api/sms/status', async (req, res) => {
+  const configured = Boolean(process.env.SEMAPHORE_API_KEY && !process.env.SEMAPHORE_API_KEY.includes('your_'));
+  const payload = {
+    configured,
+    senderName: process.env.SEMAPHORE_SENDER_NAME || null,
+    provider: 'Semaphore',
+  };
+  if (!configured) return res.json(payload);
+
+  try {
+    const url = `${SEMAPHORE_ACCOUNT_URL}?apikey=${encodeURIComponent(process.env.SEMAPHORE_API_KEY)}`;
+    const resp = await fetch(url);
+    const data = await resp.json().catch(() => null);
+    if (resp.ok && data) {
+      payload.account = {
+        creditBalance: data.credit_balance ?? data.balance ?? null,
+        accountName: data.account_name || data.name || null,
+      };
+    }
+  } catch {
+    // Account lookup is optional — sending can still work.
+  }
+  res.json(payload);
+});
+
+app.get('/api/sms/pending-deliveries', async (req, res) => {
+  try {
+    const recipients = await fetchPendingDeliveryRecipients();
+    res.json({
+      count: recipients.length,
+      smsReady: recipients.filter((r) => r.canSms).length,
+      recipients,
+    });
+  } catch (err) {
+    console.error('Failed to list SMS recipients:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/sms/send', async (req, res) => {
+  try {
+    const {
+      orderIds,
+      message,
+      sendAll = false,
+    } = req.body || {};
+
+    const template = String(message || '').trim();
+    if (!template) {
+      return res.status(400).json({ success: false, message: 'Message is required.' });
+    }
+    if (/^\s*TEST\b/i.test(template)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Semaphore ignores messages that start with "TEST". Please rephrase.',
+      });
+    }
+
+    const all = await fetchPendingDeliveryRecipients();
+    let selected = all;
+    if (!sendAll) {
+      const idSet = new Set((Array.isArray(orderIds) ? orderIds : []).map(String));
+      if (idSet.size === 0) {
+        return res.status(400).json({ success: false, message: 'Select at least one recipient.' });
+      }
+      selected = all.filter((r) => idSet.has(String(r.orderId)));
+    }
+
+    const eligible = selected.filter((r) => r.canSms);
+    if (eligible.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No selected customers have a valid Philippine mobile number.',
+      });
+    }
+
+    const results = [];
+    for (const row of eligible) {
+      const text = personalizeSms(template, {
+        name: row.customerName,
+        status: row.status,
+        ref: row.ref,
+        address: row.address,
+      });
+      try {
+        const data = await sendSemaphoreSms({
+          number: row.normalizedPhone,
+          message: text,
+        });
+        const first = Array.isArray(data) ? data[0] : data;
+        results.push({
+          orderId: row.orderId,
+          customerName: row.customerName,
+          phone: row.normalizedPhone,
+          ok: true,
+          status: first?.status || 'Queued',
+          messageId: first?.message_id || null,
+        });
+      } catch (err) {
+        results.push({
+          orderId: row.orderId,
+          customerName: row.customerName,
+          phone: row.normalizedPhone,
+          ok: false,
+          error: err.message,
+        });
+      }
+    }
+
+    const sent = results.filter((r) => r.ok).length;
+    const failed = results.length - sent;
+
+    await createNotification({
+      audience: 'admin',
+      message: `SMS blast via Semaphore: ${sent} sent, ${failed} failed (pending deliveries).`,
+      type: 'System',
+    });
+
+    res.json({
+      success: failed === 0,
+      sent,
+      failed,
+      skipped: selected.length - eligible.length,
+      results,
+    });
+  } catch (err) {
+    console.error('Failed to send SMS:', err.message);
+    const status = err.code === 'SMS_NOT_CONFIGURED' ? 503 : 500;
+    res.status(status).json({ success: false, message: err.message, details: err.details || null });
+  }
+});
+
 // Serve the Vite production build (repo-root /dist) when present — used on Hostinger.
 const distPath = path.join(__dirname, '..', 'dist');
 app.use(express.static(distPath));

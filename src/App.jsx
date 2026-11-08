@@ -17,6 +17,7 @@ import ReportsPage from './pages/ReportsPage';
 import NotificationsPage from './pages/NotificationsPage';
 import PredictionsPage from './pages/PredictionsPage';
 import DeliveryRoutePage from './pages/DeliveryRoutePage';
+import SmsPage from './pages/SmsPage';
 
 function App() {
   const [user, setUser] = useState(() => {
@@ -92,6 +93,7 @@ function App() {
             <Route path="/payments"      element={<PaymentsPage />} />
             <Route path="/inventory"     element={<InventoryPage />} />
             <Route path="/reports"       element={<ReportsPage />} />
+            <Route path="/sms"           element={<SmsPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/predictions"   element={<PredictionsPage />} />
           </Routes>

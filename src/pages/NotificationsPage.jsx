@@ -1,5 +1,6 @@
 // src/pages/NotificationsPage.jsx
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { showToast } from '../components/ui/Toast';
 import { apiMarkNotificationRead, apiMarkAllNotificationsRead } from '../api';
@@ -37,6 +38,7 @@ function timeAgo(dateStr) {
 }
 
 export default function NotificationsPage() {
+  const navigate = useNavigate();
   const { state, dispatch } = useApp();
   const [tab, setTab] = useState('all');
 
@@ -159,7 +161,11 @@ export default function NotificationsPage() {
           )}
         </SectionCard>
 
-        <SectionCard title="SMS reminders" description="Preview only — no gateway connected yet" bodyClassName="px-5 pb-5 pt-2">
+        <SectionCard
+          title="SMS reminders"
+          description="Pending / undelivered orders are sent through Semaphore in the SMS Module"
+          bodyClassName="px-5 pb-5 pt-2"
+        >
           <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">Overdue debtors</p>
           {debtors.length === 0 ? (
             <p className="text-sm text-muted">No customers with balance.</p>
@@ -174,7 +180,7 @@ export default function NotificationsPage() {
             </ul>
           )}
 
-          <label className="mb-1 block text-[12.5px] font-semibold text-ink">Message template</label>
+          <label className="mb-1 block text-[12.5px] font-semibold text-ink">Message template (preview)</label>
           <textarea
             rows={3}
             className="agua-input resize-none"
@@ -188,11 +194,10 @@ export default function NotificationsPage() {
           </div>
           <button
             type="button"
-            disabled
-            title="Not connected to a real SMS gateway yet"
-            className="mt-3 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 py-2.5 text-xs font-semibold text-slate-400"
+            onClick={() => navigate('/sms')}
+            className="mt-3 w-full rounded-xl bg-[#2563EB] py-2.5 text-xs font-semibold text-white hover:bg-blue-600"
           >
-            Send SMS blast (not connected)
+            Open SMS Module (Semaphore)
           </button>
         </SectionCard>
       </div>

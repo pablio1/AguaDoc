@@ -240,3 +240,27 @@ export async function apiMarkAllNotificationsRead(audience, userId) {
   });
   return res.json();
 }
+
+// SMS (Semaphore)
+export async function apiGetSmsStatus() {
+  const res = await fetch(`${BASE}/sms/status`);
+  const result = await res.json();
+  if (!res.ok) throw new Error(result.message || 'Failed to check SMS status');
+  return result;
+}
+export async function apiGetSmsPendingDeliveries() {
+  const res = await fetch(`${BASE}/sms/pending-deliveries`);
+  const result = await res.json();
+  if (!res.ok) throw new Error(result.message || 'Failed to load SMS recipients');
+  return result;
+}
+export async function apiSendSms({ orderIds, message, sendAll = false } = {}) {
+  const res = await fetch(`${BASE}/sms/send`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ orderIds, message, sendAll }),
+  });
+  const result = await res.json();
+  if (!res.ok) throw new Error(result.message || 'SMS send failed');
+  return result;
+}
