@@ -395,13 +395,25 @@ export default function RiderDashboard({ user, onLogout }) {
   async function setStatus(order, status) {
     setBusyId(order.id);
     try {
-      await apiUpdateRiderBookingStatus(order.id, user.id, status);
+      const updated = await apiUpdateRiderBookingStatus(order.id, user.id, status);
+      if (status === 'Accepted') {
+        if (updated?.sms?.ok) {
+          showToast(`Accepted · SMS sent to customer`);
+        } else if (updated?.sms?.skipped) {
+          showToast(`Accepted · no customer mobile on file`);
+        } else if (updated?.sms && !updated.sms.ok) {
+          showToast(`Accepted · SMS failed: ${updated.sms.reason || 'check Semaphore'}`, 'err');
+        } else {
+          showToast(`${order.ref} accepted`);
+        }
+      }
       if (status === 'Out for Delivery') {
         startGps();
         setActiveId(order.id);
         setFollow(true);
         setNavOpen(true);
         setPickingRoute(false);
+        if (updated?.sms?.ok) showToast(`Delivery started · customer notified by SMS`);
       }
       if (status === 'Delivered') {
         setNavOpen(false);
@@ -822,7 +834,20 @@ export default function RiderDashboard({ user, onLogout }) {
                         </a>
                       )}
 
-                      {tab === 'active' && order.status !== 'Out for Delivery' && order.status !== 'Delivered' && (
+                      {tab === 'active' && order.status === 'Assigned' && (
+                        <button
+                          type="button"
+                          disabled={busyId === order.id}
+                          onClick={() => setStatus(order, 'Accepted')}
+                          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 px-3 py-2 text-xs font-bold text-white shadow-md shadow-sky-500/25 disabled:opacity-60"
+                        >
+                          <CheckCircle2 size={14} />
+                          Accept delivery
+                        </button>
+                      )}
+
+                      {tab === 'active' &&
+                        ['Accepted', 'Processing'].includes(order.status) && (
                         <button
                           type="button"
                           disabled={busyId === order.id}

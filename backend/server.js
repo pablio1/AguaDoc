@@ -572,9 +572,10 @@ app.put('/api/rider/bookings/:id/status', async (req, res) => {
     if (order.riderId !== riderId)
       return res.status(403).json({ success: false, message: 'Not your booking' });
 
+    const previousStatus = order.status;
     await pool.query('UPDATE orders SET status = ? WHERE id = ?', [status, req.params.id]);
 
-    if (order.userId && status !== order.status) {
+    if (order.userId && status !== previousStatus) {
       await createNotification({
         audience: 'customer',
         userId: order.userId,
@@ -582,9 +583,40 @@ app.put('/api/rider/bookings/:id/status', async (req, res) => {
           ? `Your order ${order.ref} is out for delivery — track your rider live.`
           : status === 'Delivered'
             ? `Your order ${order.ref} has been delivered. Thank you!`
-            : `Your order ${order.ref} is now ${status}.`,
+            : status === 'Accepted'
+              ? `Your order ${order.ref} was accepted by your rider. Delivery is being prepared.`
+              : `Your order ${order.ref} is now ${status}.`,
         type: 'Order',
       });
+    }
+
+    // Auto-SMS customer via Semaphore when rider accepts (or starts delivery from Assigned)
+    let sms = null;
+    const acceptanceTransition =
+      (status === 'Accepted' && previousStatus !== 'Accepted') ||
+      (status === 'Out for Delivery' && ['Assigned', 'Pending'].includes(previousStatus));
+
+    if (acceptanceTransition) {
+      const [[rider]] = await pool.query(
+        'SELECT fullName, username FROM users WHERE id = ? LIMIT 1',
+        [riderId]
+      );
+      const riderName = rider?.fullName || rider?.username || 'your rider';
+      sms = await sendRiderAcceptedSms({ order, riderName });
+
+      if (sms?.ok) {
+        await createNotification({
+          audience: 'admin',
+          message: `SMS sent to customer for ${order.ref}: rider ${riderName} accepted the delivery.`,
+          type: 'Order',
+        });
+      } else if (sms && !sms.skipped) {
+        await createNotification({
+          audience: 'admin',
+          message: `Rider accepted ${order.ref}, but SMS failed: ${sms.reason || 'unknown error'}`,
+          type: 'System',
+        });
+      }
     }
 
     const [[row]] = await pool.query(
@@ -592,7 +624,7 @@ app.put('/api/rider/bookings/:id/status', async (req, res) => {
        FROM orders o LEFT JOIN users u ON u.id = o.userId WHERE o.id = ?`,
       [req.params.id]
     );
-    res.json(row);
+    res.json({ ...row, sms });
   } catch (err) {
     console.error('Failed to update rider booking:', err.message);
     res.status(500).json({ success: false, message: err.message });
@@ -1028,12 +1060,65 @@ function normalizePhMobile(raw) {
   return null;
 }
 
-function personalizeSms(template, { name, status, ref, address } = {}) {
+function personalizeSms(template, { name, status, ref, address, rider } = {}) {
   return String(template || '')
     .replace(/\[Name\]/gi, name || 'Customer')
     .replace(/\[Status\]/gi, status || '')
     .replace(/\[Order\]/gi, ref || '')
-    .replace(/\[Address\]/gi, address || '');
+    .replace(/\[Address\]/gi, address || '')
+    .replace(/\[Rider\]/gi, rider || 'your rider');
+}
+
+async function resolveCustomerContact(userId) {
+  if (!userId) return { name: 'Customer', phone: null };
+  const [[user]] = await pool.query(
+    'SELECT fullName, phone FROM users WHERE id = ? LIMIT 1',
+    [userId]
+  );
+  const [[customer]] = await pool.query(
+    'SELECT fullName, phone FROM customers WHERE id = ? LIMIT 1',
+    [userId]
+  );
+  return {
+    name: user?.fullName || customer?.fullName || 'Customer',
+    phone: normalizePhMobile(user?.phone || customer?.phone || null),
+  };
+}
+
+/**
+ * Fire-and-forget friendly: returns a result object, never throws to callers.
+ * Used when a rider accepts a delivery booking.
+ */
+async function sendRiderAcceptedSms({ order, riderName }) {
+  try {
+    const contact = await resolveCustomerContact(order.userId);
+    if (!contact.phone) {
+      return { ok: false, skipped: true, reason: 'Customer has no valid mobile number' };
+    }
+
+    const message = personalizeSms(
+      'Hi [Name], your AguaDoc order [Order] was accepted by [Rider]. We are preparing your delivery to [Address]. Salamat!',
+      {
+        name: contact.name,
+        ref: order.ref || order.id,
+        address: order.address || 'your address',
+        rider: riderName || 'your rider',
+        status: 'Accepted',
+      }
+    );
+
+    const data = await sendSemaphoreSms({ number: contact.phone, message });
+    const first = Array.isArray(data) ? data[0] : data;
+    return {
+      ok: true,
+      phone: contact.phone,
+      messageId: first?.message_id || null,
+      status: first?.status || 'Queued',
+    };
+  } catch (err) {
+    console.error('Auto SMS on rider accept failed:', err.message);
+    return { ok: false, skipped: false, reason: err.message, code: err.code || null };
+  }
 }
 
 async function fetchPendingDeliveryRecipients() {
