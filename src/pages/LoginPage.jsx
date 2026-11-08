@@ -1,7 +1,23 @@
 import { useState } from 'react';
 import { apiLogin } from '../api';
-import { Eye, EyeOff, User, Lock, ArrowRight } from 'lucide-react';
+import {
+  Eye,
+  EyeOff,
+  User,
+  Lock,
+  ArrowRight,
+  ArrowLeft,
+  Shield,
+  Truck,
+  Users,
+} from 'lucide-react';
 import AuthShell from '../components/AuthShell';
+
+const ROLE_HINTS = [
+  { icon: Shield, label: 'Admin', hint: 'Station Manager' },
+  { icon: Truck, label: 'Rider', hint: 'Deliveries' },
+  { icon: Users, label: 'Customer', hint: 'Orders & tracking' },
+];
 
 export default function LoginPage({ onLogin, onGoRegister, onGoLanding }) {
   const [username, setUsername] = useState('');
@@ -9,13 +25,18 @@ export default function LoginPage({ onLogin, onGoRegister, onGoLanding }) {
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [focused, setFocused] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    if (!username.trim() || !password) {
+      setError('Enter your username and password to continue.');
+      return;
+    }
     setLoading(true);
     try {
-      const result = await apiLogin(username, password);
+      const result = await apiLogin(username.trim(), password);
       if (result.success) onLogin(result.user);
       else setError(result.message || 'Invalid credentials');
     } catch {
@@ -26,68 +47,135 @@ export default function LoginPage({ onLogin, onGoRegister, onGoLanding }) {
   };
 
   return (
-    <AuthShell title="Welcome back" subtitle="Sign in to manage orders, deliveries, and your account.">
+    <AuthShell
+      badge="Secure sign-in"
+      title="Welcome back"
+      subtitle="Sign in to manage orders, deliveries, inventory, and your AguaDoc account."
+    >
       {onGoLanding && (
         <button
           type="button"
           onClick={onGoLanding}
-          className="mb-4 text-xs font-semibold text-muted hover:text-accent2"
+          className="mb-5 inline-flex items-center gap-1.5 text-xs font-semibold text-muted transition hover:text-accent2"
         >
-          ← Back to home
+          <ArrowLeft size={13} /> Back to home
         </button>
       )}
+
+      <div className="mb-5 grid grid-cols-3 gap-2">
+        {ROLE_HINTS.map(({ icon: Icon, label, hint }) => (
+          <div
+            key={label}
+            className="rounded-xl border border-slate-100 bg-slate-50/80 px-2 py-2.5 text-center"
+          >
+            <Icon size={14} className="mx-auto text-sky-600" strokeWidth={2.25} />
+            <p className="mt-1.5 text-[11px] font-bold text-ink">{label}</p>
+            <p className="text-[10px] text-muted">{hint}</p>
+          </div>
+        ))}
+      </div>
+
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">Username or email</label>
-          <div className="flex items-center gap-2 rounded-[0.9rem] border border-slate-200/80 bg-white px-3 py-2.5 focus-within:border-accent focus-within:ring-4 focus-within:ring-blue-500/15">
-            <User size={16} className="text-slate-400" />
+          <label className="mb-1.5 block text-[12px] font-semibold text-ink">
+            Username or email
+          </label>
+          <div
+            className={`flex items-center gap-2.5 rounded-xl border bg-white px-3.5 py-3 transition ${
+              focused === 'user'
+                ? 'border-blue-500 shadow-[0_0_0_4px_rgba(59,130,246,0.14)]'
+                : 'border-slate-200/90 hover:border-slate-300'
+            }`}
+          >
+            <User size={16} className={focused === 'user' ? 'text-blue-500' : 'text-slate-400'} />
             <input
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="admin / customer / rider"
-              className="flex-1 bg-transparent text-sm outline-none"
+              onFocus={() => setFocused('user')}
+              onBlur={() => setFocused('')}
+              placeholder="e.g. admin"
+              className="flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-slate-400"
               autoComplete="username"
+              autoFocus
             />
           </div>
         </div>
 
         <div>
-          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">Password</label>
-          <div className="flex items-center gap-2 rounded-[0.9rem] border border-slate-200/80 bg-white px-3 py-2.5 focus-within:border-accent focus-within:ring-4 focus-within:ring-blue-500/15">
-            <Lock size={16} className="text-slate-400" />
+          <div className="mb-1.5 flex items-center justify-between">
+            <label className="block text-[12px] font-semibold text-ink">Password</label>
+          </div>
+          <div
+            className={`flex items-center gap-2.5 rounded-xl border bg-white px-3.5 py-3 transition ${
+              focused === 'pass'
+                ? 'border-blue-500 shadow-[0_0_0_4px_rgba(59,130,246,0.14)]'
+                : 'border-slate-200/90 hover:border-slate-300'
+            }`}
+          >
+            <Lock size={16} className={focused === 'pass' ? 'text-blue-500' : 'text-slate-400'} />
             <input
               type={showPass ? 'text' : 'password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="flex-1 bg-transparent text-sm outline-none"
+              onFocus={() => setFocused('pass')}
+              onBlur={() => setFocused('')}
+              placeholder="Enter your password"
+              className="flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-slate-400"
               autoComplete="current-password"
             />
-            <button type="button" onClick={() => setShowPass(!showPass)} className="text-slate-400 hover:text-slate-600">
+            <button
+              type="button"
+              onClick={() => setShowPass(!showPass)}
+              className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+              aria-label={showPass ? 'Hide password' : 'Show password'}
+            >
               {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
           </div>
         </div>
 
         {error && (
-          <p className="rounded-xl bg-red-50 px-3 py-2 text-center text-xs font-medium text-red-600 ring-1 ring-red-100">
+          <div
+            role="alert"
+            className="rounded-xl border border-red-100 bg-red-50 px-3.5 py-2.5 text-[12.5px] font-medium text-red-600"
+          >
             {error}
-          </p>
+          </div>
         )}
 
-        <button type="submit" disabled={loading} className="agua-btn agua-btn-primary w-full mt-1">
-          {loading ? 'Signing in…' : 'Sign in'}
-          {!loading && <ArrowRight size={16} />}
+        <button
+          type="submit"
+          disabled={loading}
+          className="group relative mt-1 flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl bg-[#2563EB] px-4 py-3 text-sm font-bold text-white shadow-[0_12px_28px_rgba(37,99,235,0.32)] transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-55"
+        >
+          <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/15 to-transparent transition duration-700 group-hover:translate-x-full" />
+          {loading ? (
+            <>
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+              Signing in…
+            </>
+          ) : (
+            <>
+              Sign in
+              <ArrowRight size={16} className="transition group-hover:translate-x-0.5" />
+            </>
+          )}
         </button>
       </form>
 
-      <p className="mt-6 text-center text-sm text-muted">
-        New here?{' '}
-        <button type="button" onClick={onGoRegister} className="font-semibold text-accent2 hover:underline">
-          Create an account
-        </button>
-      </p>
+      <div className="mt-6 border-t border-slate-100 pt-5 text-center">
+        <p className="text-sm text-muted">
+          New to AguaDoc?{' '}
+          <button
+            type="button"
+            onClick={onGoRegister}
+            className="font-semibold text-[#2563EB] transition hover:underline"
+          >
+            Create an account
+          </button>
+        </p>
+      </div>
     </AuthShell>
   );
 }

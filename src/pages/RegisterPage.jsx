@@ -69,7 +69,11 @@ export default function RegisterPage({ onGoLogin, onLogin, onGoLanding }) {
   };
 
   return (
-    <AuthShell title="Create your account" subtitle="Join AguaDoc to request deliveries and track your water orders.">
+    <AuthShell
+      badge="New customer"
+      title="Create your account"
+      subtitle="Join AguaDoc to request deliveries and track your water orders."
+    >
       {onGoLanding && (
         <button
           type="button"
