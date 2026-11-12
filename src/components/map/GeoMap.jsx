@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { LngLatBounds, Map, Marker, NavigationControl, Popup } from 'maplibre-gl';
+import { LngLatBounds, Map as MapLibreMap, Marker, NavigationControl, Popup } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { DEFAULT_CENTER, emptyLineCollection, geoStyleUrl, lineFeature, toLineCoords } from '../../lib/geoapify';
 import { apiGetMapsConfig } from '../../api';
@@ -36,8 +36,8 @@ export default function GeoMap({
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
-  const markersRef = useRef(new Map());
-  const routeHandlersRef = useRef(new Map());
+  const markersRef = useRef(new globalThis.Map());
+  const routeHandlersRef = useRef(new globalThis.Map());
   const followBooted = useRef(false);
   const lastBearing = useRef(0);
   const apiKeyRef = useRef('');
@@ -70,7 +70,7 @@ export default function GeoMap({
           layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
         };
 
-      map = new Map({
+      map = new MapLibreMap({
         container: containerRef.current,
         style: styleUrl,
         center: [Number(center.lng), Number(center.lat)],
