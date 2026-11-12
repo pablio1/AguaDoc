@@ -656,7 +656,7 @@ app.get('/api/orders', async (req, res) => {
   const { userId } = req.query;
   const [rows] = userId
     ? await pool.query(
-        `SELECT o.*, r.fullName AS riderName
+        `SELECT o.*, r.fullName AS riderName, r.phone AS riderPhone
          FROM orders o
          LEFT JOIN users r ON r.id = o.riderId
          WHERE o.userId = ?
@@ -664,7 +664,7 @@ app.get('/api/orders', async (req, res) => {
         [userId]
       )
     : await pool.query(
-        `SELECT o.*, r.fullName AS riderName
+        `SELECT o.*, r.fullName AS riderName, r.phone AS riderPhone
          FROM orders o
          LEFT JOIN users r ON r.id = o.riderId
          ORDER BY o.date DESC`

@@ -2,10 +2,10 @@ import { useState, useEffect, useMemo } from 'react';
 import {
   LayoutDashboard, PlusCircle, Package, CreditCard, LogOut, Bell, User, Info,
   MapPinned, Radio, Search, ClipboardList, Clock, CheckCircle2, Truck, MapPin,
-  Store, Cog, Bike, ChevronDown, ChevronUp,
+  Store, Cog,
 } from 'lucide-react';
 import BrandMark from '../components/BrandMark';
-import GeoMap from '../components/map/GeoMap';
+import LiveTrackScreen from '../components/customer/LiveTrackScreen';
 import {
   apiGetOrders, apiUpdateUser, apiAcceptTerms, apiGetNotifications,
   apiMarkNotificationRead, apiMarkAllNotificationsRead, apiGetRiderLocation, apiGetRiderRoute,
@@ -13,10 +13,6 @@ import {
 import RequestServicePage from './RequestServicePage';
 import { TermsModal, TermsGate, TERMS_VERSION } from '../components/TermsContent';
 import { formatMoney } from '../lib/money';
-
-const riderHtml = `<div style="background:#16a34a;color:white;font-size:15px;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.5);">🛵</div>`;
-const homeHtml = `<div style="background:#3b82f6;color:white;font-size:15px;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.5);">🏠</div>`;
-const RIDER_STALE_MS = 2 * 60 * 1000;
 
 const NAV = [
   { icon: LayoutDashboard, label: 'Dashboard',       id: 'dashboard', short: 'Home'      },
@@ -58,9 +54,9 @@ function orderSteps(order) {
     ];
   }
   return [
-    { label: 'Placed', icon: Clock },
-    { label: 'Assigned', icon: Bike },
-    { label: 'On the way', icon: Truck },
+    { label: 'Order Confirmed', icon: Clock },
+    { label: 'Preparing', icon: Cog },
+    { label: 'Out for Delivery', icon: Truck },
     { label: 'Delivered', icon: CheckCircle2 },
   ];
 }
@@ -94,10 +90,7 @@ function formatOrderDate(value) {
 function OrderCard({
   order,
   completed,
-  trackingOrderId,
-  setTrackingOrderId,
-  rider,
-  trackRoute,
+  onTrack,
 }) {
   const walkin = isWalkinOrder(order);
   const steps = orderSteps(order);
@@ -107,7 +100,6 @@ function OrderCard({
     isOutForDelivery ||
     ['Assigned', 'Accepted', 'Processing', 'Pending'].includes(order.status)
   );
-  const tracking = trackingOrderId === order.id;
   const TypeIcon = walkin ? Store : Truck;
 
   return (
@@ -166,16 +158,16 @@ function OrderCard({
                     <div
                       className={`flex h-9 w-9 items-center justify-center rounded-full border-2 transition ${
                         done
-                          ? 'border-blue-500 bg-blue-500 text-white'
+                          ? 'border-emerald-500 bg-emerald-500 text-white'
                           : current
-                            ? 'border-blue-500 bg-white text-blue-600 shadow-sm'
+                            ? 'border-emerald-500 bg-white text-emerald-600 shadow-sm'
                             : 'border-slate-200 bg-white text-slate-300'
                       }`}
                     >
                       {done ? <CheckCircle2 size={16} /> : <Icon size={15} />}
                     </div>
                     <span
-                      className={`mt-1.5 max-w-[72px] text-center text-[10px] font-semibold leading-tight sm:text-[11px] ${
+                      className={`mt-1.5 max-w-[76px] text-center text-[10px] font-semibold leading-tight sm:text-[11px] ${
                         done || current ? 'text-ink' : 'text-slate-300'
                       }`}
                     >
@@ -183,7 +175,7 @@ function OrderCard({
                     </span>
                   </div>
                   {i < steps.length - 1 && (
-                    <div className={`mx-1.5 mb-5 h-0.5 flex-1 rounded sm:mx-2 ${done ? 'bg-blue-500' : 'bg-slate-200'}`} />
+                    <div className={`mx-1.5 mb-5 h-0.5 flex-1 rounded sm:mx-2 ${done ? 'bg-emerald-500' : 'bg-slate-200'}`} />
                   )}
                 </div>
               );
@@ -203,86 +195,16 @@ function OrderCard({
         <div className="border-t border-slate-100 px-5 py-3">
           <button
             type="button"
-            onClick={() => setTrackingOrderId(tracking ? null : order.id)}
-            className={`flex w-full items-center justify-between gap-3 rounded-xl px-4 py-3 text-sm font-bold transition ${
+            onClick={() => onTrack(order.id)}
+            className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition ${
               isOutForDelivery
                 ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
                 : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
             }`}
           >
-            <span className="flex items-center gap-2">
-              {isOutForDelivery ? <Radio size={16} className="animate-pulse" /> : <MapPinned size={16} />}
-              {tracking
-                ? 'Hide map'
-                : isOutForDelivery
-                  ? 'Track rider live'
-                  : 'Preview delivery map'}
-            </span>
-            {tracking ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+            {isOutForDelivery ? <Radio size={16} className="animate-pulse" /> : <MapPinned size={16} />}
+            {isOutForDelivery ? 'Track delivery live' : 'Preview delivery map'}
           </button>
-
-          {tracking && (() => {
-            const riderIsLive = rider?.lat != null && rider?.updatedAt
-              && (Date.now() - new Date(rider.updatedAt).getTime()) < RIDER_STALE_MS;
-            const homePos = order.lat != null && order.lng != null
-              ? [Number(order.lat), Number(order.lng)]
-              : null;
-            const riderPos = riderIsLive ? [rider.lat, rider.lng] : null;
-            const center = riderPos || homePos || [10.3157, 123.9740];
-            return (
-              <div className="mt-3">
-                <div className={`h-64 overflow-hidden rounded-xl border sm:h-72 ${
-                  isOutForDelivery ? 'border-emerald-200 shadow-lg shadow-emerald-500/10' : 'border-slate-200'
-                }`}>
-                  <GeoMap
-                    key={`track-${order.id}`}
-                    theme="light"
-                    center={{ lat: center[0], lng: center[1] }}
-                    zoom={14}
-                    className="h-full"
-                    fitPoints={[riderPos, homePos].filter(Boolean)}
-                    follow={riderPos ? { enabled: true, lat: riderPos[0], lng: riderPos[1], bearing: 0, pitch: 0, zoom: 15 } : null}
-                    markers={[
-                      homePos && {
-                        id: 'home',
-                        lat: homePos[0],
-                        lng: homePos[1],
-                        html: homeHtml,
-                        popupHtml: 'Your delivery address',
-                      },
-                      riderPos && {
-                        id: 'rider',
-                        lat: riderPos[0],
-                        lng: riderPos[1],
-                        html: riderHtml,
-                        popupHtml: 'Your rider (live)',
-                      },
-                    ].filter(Boolean)}
-                    routes={trackRoute.length > 1 ? [{
-                      id: 'track',
-                      geometry: trackRoute,
-                      color: '#3b82f6',
-                      width: 5,
-                      opacity: 0.9,
-                    }] : []}
-                    geometryFormat="latlng"
-                  />
-                </div>
-                <p className={`mt-2 flex items-center justify-center gap-2 text-xs font-medium ${
-                  riderIsLive ? 'text-emerald-600' : 'text-amber-600'
-                }`}>
-                  <span className={`inline-block h-2 w-2 rounded-full ${
-                    riderIsLive ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'
-                  }`} />
-                  {riderIsLive
-                    ? 'Live rider location updating…'
-                    : isOutForDelivery
-                      ? 'Waiting for rider to share GPS…'
-                      : 'Drop-off shown now. Rider appears when delivery starts.'}
-                </p>
-              </div>
-            );
-          })()}
         </div>
       )}
     </article>
@@ -299,9 +221,10 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
   const [showTerms, setShowTerms]          = useState(false); // the ⓘ reminder
   const [acceptingTerms, setAcceptingTerms] = useState(false);
   const [checkoutBanner, setCheckoutBanner] = useState(null); // { type: 'success'|'cancel', text }
-  const [trackingOrderId, setTrackingOrderId] = useState(null); // which order's live map is expanded
+  const [trackingOrderId, setTrackingOrderId] = useState(null); // full-screen live track
   const [rider, setRider] = useState(null); // { lat, lng, updatedAt } | null
   const [trackRoute, setTrackRoute] = useState([]); // [lat,lng][]
+  const [trackMeta, setTrackMeta] = useState({}); // { durationS, distanceM }
 
   // Edit Profile state
   const [profileForm, setProfileForm] = useState({
@@ -378,15 +301,28 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
       const order = orders.find((o) => o.id === trackingOrderId);
       if (!order?.lat || !order?.lng || rider?.lat == null || rider?.lng == null) {
         setTrackRoute([]);
+        setTrackMeta({});
         return;
       }
       const data = await apiGetRiderRoute(rider.lat, rider.lng, order.lat, order.lng);
       if (cancelled || data.success === false) return;
       setTrackRoute((data.geometry || []).map(([lng, lat]) => [lat, lng]));
+      setTrackMeta({
+        durationS: data.durationS,
+        distanceM: data.distanceM,
+      });
     }
-    run().catch(() => setTrackRoute([]));
+    run().catch(() => {
+      setTrackRoute([]);
+      setTrackMeta({});
+    });
     return () => { cancelled = true; };
   }, [trackingOrderId, rider?.lat, rider?.lng, orders]);
+
+  const trackingOrder = useMemo(
+    () => orders.find((o) => o.id === trackingOrderId) || null,
+    [orders, trackingOrderId]
+  );
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -502,6 +438,16 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
         />
       )}
       {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
+
+      {trackingOrder && (
+        <LiveTrackScreen
+          order={trackingOrder}
+          rider={rider}
+          trackRoute={trackRoute}
+          trackMeta={trackMeta}
+          onClose={() => setTrackingOrderId(null)}
+        />
+      )}
 
       {/* Sidebar (desktop/tablet only — mobile uses the bottom nav bar instead) */}
       <aside className="hidden h-screen w-[248px] min-w-[248px] shrink-0 flex-col bg-[#0f172a] text-white md:flex">
@@ -642,8 +588,11 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
             <RequestServicePage
               user={user}
               onOrderPlaced={() => {
-                apiGetOrders(user.id).then(data => setOrders(Array.isArray(data) ? data : []));
-                setActive('dashboard');
+                apiGetOrders(user.id).then((data) => setOrders(Array.isArray(data) ? data : []));
+              }}
+              onViewOrders={() => {
+                setOrdersTab('active');
+                setActive('orders');
               }}
             />
           )}
@@ -909,10 +858,7 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
                         key={order.id}
                         order={order}
                         completed={ordersTab === 'completed'}
-                        trackingOrderId={trackingOrderId}
-                        setTrackingOrderId={setTrackingOrderId}
-                        rider={rider}
-                        trackRoute={trackRoute}
+                        onTrack={setTrackingOrderId}
                       />
                     ))}
                   </div>
