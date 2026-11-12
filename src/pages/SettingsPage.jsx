@@ -284,8 +284,8 @@ export default function SettingsPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Integration Settings"
-        subtitle="Configure GCash (via Xendit) and Semaphore SMS keys from the admin panel. Values saved here override .env."
+        title="Integrations"
+        subtitle="Configure GCash (Xendit), Semaphore SMS, and Geoapify maps. Values saved here override .env."
       >
         <button
           type="button"

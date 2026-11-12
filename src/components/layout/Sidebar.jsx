@@ -15,9 +15,9 @@ const navItems = [
   { path: '/delivery-route', icon: Map, label: 'Live Delivery Map' },
   { path: '/sms', icon: MessageSquareText, label: 'SMS Module' },
   { path: '/payments', icon: CreditCard, label: 'Payments & Billing' },
+  { path: '/settings', icon: Settings, label: 'Integrations' },
   { path: '/notifications', icon: Bell, label: 'Notifications' },
   { path: '/predictions', icon: Sparkles, label: 'AI Predictions' },
-  { path: '/settings', icon: Settings, label: 'Settings' },
 ];
 
 export default function Sidebar({ onLogout, open = false, onClose }) {
