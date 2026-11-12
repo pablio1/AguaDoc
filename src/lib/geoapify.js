@@ -11,6 +11,29 @@ export function geoStyleUrl(apiKey, theme = 'light') {
   return `https://maps.geoapify.com/v1/styles/${style}/style.json?apiKey=${encodeURIComponent(apiKey)}`;
 }
 
+/** Raster basemap when Geoapify key is missing or style fails to load */
+export function fallbackStyle(theme = 'light') {
+  const tiles = theme === 'dark'
+    ? [
+        'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png',
+      ]
+    : [
+        'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
+      ];
+  return {
+    version: 8,
+    sources: {
+      basemap: {
+        type: 'raster',
+        tiles,
+        tileSize: 256,
+        attribution: '© OpenStreetMap © CARTO',
+      },
+    },
+    layers: [{ id: 'basemap', type: 'raster', source: 'basemap' }],
+  };
+}
+
 /** Convert OSRM-style [lng,lat][] or Leaflet [lat,lng][] into MapLibre LineString coords [lng,lat][] */
 export function toLineCoords(geometry = [], format = 'lnglat') {
   return (geometry || [])

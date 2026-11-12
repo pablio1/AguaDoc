@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { LngLatBounds, Map as MapLibreMap, Marker, NavigationControl, Popup } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { DEFAULT_CENTER, emptyLineCollection, geoStyleUrl, lineFeature, toLineCoords } from '../../lib/geoapify';
+import '../../lib/maplibreWorker';
+import { DEFAULT_CENTER, emptyLineCollection, fallbackStyle, geoStyleUrl, lineFeature, toLineCoords } from '../../lib/geoapify';
 import { apiGetMapsConfig } from '../../api';
 
 /**
@@ -56,19 +57,7 @@ export default function GeoMap({
       const cfg = await apiGetMapsConfig().catch(() => ({ apiKey: '' }));
       if (cancelled || !containerRef.current) return;
       apiKeyRef.current = cfg.apiKey || '';
-      const styleUrl = geoStyleUrl(apiKeyRef.current, theme)
-        || {
-          version: 8,
-          sources: {
-            osm: {
-              type: 'raster',
-              tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-              tileSize: 256,
-              attribution: '© OpenStreetMap',
-            },
-          },
-          layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
-        };
+      const styleUrl = geoStyleUrl(apiKeyRef.current, theme) || fallbackStyle(theme);
 
       map = new MapLibreMap({
         container: containerRef.current,
@@ -81,39 +70,58 @@ export default function GeoMap({
       map.addControl(new NavigationControl({ visualizePitch: true }), 'top-right');
       mapRef.current = map;
 
+      const ensureRouteLayers = () => {
+        if (map.getSource('aguadoc-routes')) return;
+        map.addSource('aguadoc-routes', { type: 'geojson', data: emptyLineCollection() });
+        map.addLayer({
+          id: 'aguadoc-routes-casing',
+          type: 'line',
+          source: 'aguadoc-routes',
+          paint: {
+            'line-color': '#ffffff',
+            'line-width': ['+', ['get', 'width'], 6],
+            'line-opacity': 0.95,
+          },
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
+        });
+        map.addLayer({
+          id: 'aguadoc-routes-line',
+          type: 'line',
+          source: 'aguadoc-routes',
+          paint: {
+            'line-color': ['get', 'color'],
+            'line-width': ['get', 'width'],
+            'line-opacity': ['get', 'opacity'],
+          },
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
+        });
+      };
+
       map.on('load', () => {
-        if (!map.getSource('aguadoc-routes')) {
-          map.addSource('aguadoc-routes', { type: 'geojson', data: emptyLineCollection() });
-          map.addLayer({
-            id: 'aguadoc-routes-casing',
-            type: 'line',
-            source: 'aguadoc-routes',
-            paint: {
-              'line-color': '#ffffff',
-              'line-width': ['+', ['get', 'width'], 6],
-              'line-opacity': 0.95,
-            },
-            layout: { 'line-cap': 'round', 'line-join': 'round' },
-          });
-          map.addLayer({
-            id: 'aguadoc-routes-line',
-            type: 'line',
-            source: 'aguadoc-routes',
-            paint: {
-              'line-color': ['get', 'color'],
-              'line-width': ['get', 'width'],
-              'line-opacity': ['get', 'opacity'],
-            },
-            layout: { 'line-cap': 'round', 'line-join': 'round' },
-          });
-        }
+        ensureRouteLayers();
         map.resize();
+      });
+
+      // Invalid Geoapify key / style → fall back to raster basemap instead of a black canvas
+      let fellBack = false;
+      map.on('error', (e) => {
+        const msg = e?.error?.message || String(e?.error || '');
+        if (fellBack || !/style|tile|fetch|401|403|404|failed/i.test(msg)) return;
+        if (!apiKeyRef.current) return;
+        fellBack = true;
+        apiKeyRef.current = '';
+        map.setStyle(fallbackStyle(theme));
+        map.once('style.load', ensureRouteLayers);
       });
 
       map.on('click', (e) => {
         onMapClickRef.current?.({ lat: e.lngLat.lat, lng: e.lngLat.lng });
       });
       map.on('dragstart', () => onUserDragRef.current?.());
+
+      // Flex/absolute parents often need a second resize after layout settles
+      requestAnimationFrame(() => map.resize());
+      setTimeout(() => map.resize(), 250);
     }
 
     boot();
@@ -130,10 +138,9 @@ export default function GeoMap({
   // Theme / style swap
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !apiKeyRef.current) return;
-    const url = geoStyleUrl(apiKeyRef.current, theme);
-    if (!url) return;
-    map.setStyle(url);
+    if (!map) return;
+    const nextStyle = geoStyleUrl(apiKeyRef.current, theme) || fallbackStyle(theme);
+    map.setStyle(nextStyle);
     map.once('style.load', () => {
       if (!map.getSource('aguadoc-routes')) {
         map.addSource('aguadoc-routes', { type: 'geojson', data: emptyLineCollection() });
@@ -330,7 +337,7 @@ export default function GeoMap({
   return (
     <div
       ref={containerRef}
-      className={`h-full w-full min-h-[220px] ${className}`}
+      className={`h-full w-full min-h-[220px] bg-[#dbe4ee] ${className}`}
       style={style}
     />
   );
