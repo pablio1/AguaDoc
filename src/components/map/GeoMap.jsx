@@ -65,7 +65,7 @@ export default function GeoMap({
         center: [Number(center.lng), Number(center.lat)],
         zoom,
         interactive,
-        attributionControl: { compact: true },
+        attributionControl: true,
       });
       map.addControl(new NavigationControl({ visualizePitch: true }), 'top-right');
       mapRef.current = map;

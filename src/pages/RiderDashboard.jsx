@@ -439,7 +439,7 @@ export default function RiderDashboard({ user, onLogout }) {
 
       <div className="absolute inset-0">
         <GeoMap
-          theme={navigating ? 'light' : 'dark'}
+          theme="light"
           center={{ lat: mapCenter[0], lng: mapCenter[1] }}
           zoom={14}
           className="h-full w-full"
