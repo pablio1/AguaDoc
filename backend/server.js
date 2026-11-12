@@ -37,10 +37,30 @@ const GEO_UA = { 'User-Agent': 'AguaDoc-Capstone/1.0 (school project)' };
 
 async function geocodeAddress(address) {
   if (!address) return { lat: null, lng: null };
+  const q = `${address}, Lapu-Lapu City, Cebu, Philippines`;
+
+  // Prefer Geoapify when configured
   try {
-    const query = encodeURIComponent(`${address}, Lapu-Lapu City, Cebu, Philippines`);
+    const key = await getSetting('geoapify_api_key');
+    if (key) {
+      const url =
+        `https://api.geoapify.com/v1/geocode/search?text=${encodeURIComponent(q)}` +
+        `&filter=countrycode:ph&limit=1&apiKey=${encodeURIComponent(key)}`;
+      const geoRes = await fetch(url);
+      const data = await geoRes.json();
+      const hit = data?.features?.[0];
+      if (hit?.geometry?.coordinates) {
+        const [lng, lat] = hit.geometry.coordinates;
+        return { lat: Number(lat), lng: Number(lng) };
+      }
+    }
+  } catch (err) {
+    console.warn('Geoapify geocode failed:', err.message);
+  }
+
+  try {
     const geoRes = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${query}`,
+      `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`,
       { headers: GEO_UA }
     );
     const results = await geoRes.json();
@@ -55,6 +75,22 @@ async function geocodeAddress(address) {
 
 async function reverseGeocode(lat, lng) {
   if (lat == null || lng == null) return null;
+
+  try {
+    const key = await getSetting('geoapify_api_key');
+    if (key) {
+      const url =
+        `https://api.geoapify.com/v1/geocode/reverse?lat=${lat}&lon=${lng}` +
+        `&apiKey=${encodeURIComponent(key)}`;
+      const geoRes = await fetch(url);
+      const data = await geoRes.json();
+      const label = data?.features?.[0]?.properties?.formatted;
+      if (label) return label;
+    }
+  } catch (err) {
+    console.warn('Geoapify reverse geocode failed:', err.message);
+  }
+
   try {
     const geoRes = await fetch(
       `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`,
@@ -81,6 +117,63 @@ async function resolveCoords({ lat, lng, address }) {
 // Your refill station's coordinates — used as the route's starting point.
 // TODO: replace with AguaDoc's actual station location in Barangay Pajo.
 const DEPOT = { lat: 10.3157, lng: 123.9740, name: 'AguaDoc Station' };
+
+// Public OSRM mirrors — project-osrm.org is free but flaky (rate limits / timeouts).
+const OSRM_BASES = [
+  'https://router.project-osrm.org',
+  'http://router.project-osrm.org',
+];
+
+function straightLineGeometry(points) {
+  // points: [{lat,lng}, ...] → [[lng,lat], ...]
+  return points
+    .filter((p) => p && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)))
+    .map((p) => [Number(p.lng), Number(p.lat)]);
+}
+
+function haversineM(a, b) {
+  const toRad = (d) => (d * Math.PI) / 180;
+  const R = 6371000;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+async function fetchOsrmJson(pathAndQuery, { attempts = 3 } = {}) {
+  let lastErr = null;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    for (const base of OSRM_BASES) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 12000);
+      try {
+        const res = await fetch(`${base}${pathAndQuery}`, {
+          signal: ctrl.signal,
+          headers: { Accept: 'application/json' },
+        });
+        clearTimeout(timer);
+        if (!res.ok) {
+          lastErr = new Error(`OSRM HTTP ${res.status}`);
+          continue;
+        }
+        const data = await res.json();
+        if (data?.code && data.code !== 'Ok') {
+          lastErr = new Error(data.message || `OSRM ${data.code}`);
+          continue;
+        }
+        return data;
+      } catch (err) {
+        clearTimeout(timer);
+        lastErr = err;
+      }
+    }
+    // Brief backoff before next full attempt
+    await new Promise((r) => setTimeout(r, 350 * (attempt + 1)));
+  }
+  throw lastErr || new Error('OSRM unavailable');
+}
 
 // ── Notifications helper ──
 // audience: 'admin' or 'customer'. userId is required (and only meaningful) for 'customer' notifications.
@@ -139,20 +232,146 @@ async function checkUnpaidBalances() {
   }
 }
 
-// ── Xendit (Payment Sessions API — the current recommended integration, not the legacy /v2/invoices) ──
-// Docs: https://docs.xendit.co/docs/payment-sessions-overview
-const XENDIT_SECRET_KEY     = process.env.XENDIT_SECRET_KEY;
-const XENDIT_WEBHOOK_TOKEN  = process.env.XENDIT_WEBHOOK_TOKEN; // exact string, from Dashboard → Settings → Webhooks
-const FRONTEND_URL          = process.env.FRONTEND_URL || 'http://localhost:5173'; // your local Vite dev server — never needs to be HTTPS
-const BACKEND_PUBLIC_URL    = process.env.BACKEND_PUBLIC_URL; // your ngrok HTTPS URL for this backend (e.g. https://xxxx.ngrok-free.dev)
+// ── App settings (admin-configurable; falls back to .env) ──
+const SETTINGS_META = {
+  xendit_secret_key: {
+    label: 'Xendit / GCash secret key',
+    secret: true,
+    env: 'XENDIT_SECRET_KEY',
+  },
+  xendit_webhook_token: {
+    label: 'Xendit webhook verification token',
+    secret: true,
+    env: 'XENDIT_WEBHOOK_TOKEN',
+  },
+  backend_public_url: {
+    label: 'Backend public URL (ngrok / production)',
+    secret: false,
+    env: 'BACKEND_PUBLIC_URL',
+  },
+  semaphore_api_key: {
+    label: 'Semaphore SMS API key',
+    secret: true,
+    env: 'SEMAPHORE_API_KEY',
+  },
+  semaphore_sender_name: {
+    label: 'Semaphore sender name',
+    secret: false,
+    env: 'SEMAPHORE_SENDER_NAME',
+  },
+  geoapify_api_key: {
+    label: 'Geoapify API key (MapLibre maps + routing)',
+    secret: true,
+    env: 'GEOAPIFY_API_KEY',
+  },
+};
 
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+function isPlaceholderSecret(value) {
+  if (value == null) return true;
+  const v = String(value).trim();
+  if (!v) return true;
+  return /your_.*here|changeme|xxx+/i.test(v);
+}
+
+async function getSettingRaw(key) {
+  try {
+    const [[row]] = await pool.query(
+      'SELECT settingValue FROM app_settings WHERE settingKey = ? LIMIT 1',
+      [key]
+    );
+    if (row && row.settingValue != null && String(row.settingValue).trim() !== '') {
+      return String(row.settingValue).trim();
+    }
+  } catch (err) {
+    // Table may not exist yet on first boot — fall back to env.
+    if (err.code !== 'ER_NO_SUCH_TABLE') {
+      console.warn(`Settings read failed (${key}):`, err.message);
+    }
+  }
+  const envName = SETTINGS_META[key]?.env;
+  const fromEnv = envName ? process.env[envName] : undefined;
+  return fromEnv && String(fromEnv).trim() ? String(fromEnv).trim() : '';
+}
+
+async function getSetting(key) {
+  const value = await getSettingRaw(key);
+  return isPlaceholderSecret(value) ? '' : value;
+}
+
+function maskSecret(value) {
+  if (!value) return null;
+  const s = String(value);
+  if (s.length <= 4) return '••••';
+  return `${'•'.repeat(Math.min(12, s.length - 4))}${s.slice(-4)}`;
+}
+
+async function getPublicSettings() {
+  const out = {};
+  for (const [key, meta] of Object.entries(SETTINGS_META)) {
+    const value = await getSetting(key);
+    const configured = Boolean(value);
+    out[key] = {
+      label: meta.label,
+      secret: meta.secret,
+      configured,
+      source: configured
+        ? (await getSettingSource(key))
+        : 'none',
+      value: meta.secret ? undefined : (value || ''),
+      hint: meta.secret ? maskSecret(value) : (value || null),
+    };
+  }
+  return out;
+}
+
+async function getSettingSource(key) {
+  try {
+    const [[row]] = await pool.query(
+      'SELECT settingValue FROM app_settings WHERE settingKey = ? LIMIT 1',
+      [key]
+    );
+    if (row && row.settingValue != null && String(row.settingValue).trim() !== '' && !isPlaceholderSecret(row.settingValue)) {
+      return 'admin';
+    }
+  } catch {
+    // ignore
+  }
+  const envName = SETTINGS_META[key]?.env;
+  const fromEnv = envName ? process.env[envName] : '';
+  if (fromEnv && !isPlaceholderSecret(fromEnv)) return 'env';
+  return 'none';
+}
+
+async function upsertSetting(key, value, updatedBy = 'Admin') {
+  if (!SETTINGS_META[key]) throw new Error(`Unknown setting: ${key}`);
+  const cleaned = value == null ? '' : String(value).trim();
+  if (!cleaned) {
+    await pool.query('DELETE FROM app_settings WHERE settingKey = ?', [key]);
+    return;
+  }
+  await pool.query(
+    `INSERT INTO app_settings (settingKey, settingValue, updatedBy)
+     VALUES (?, ?, ?)
+     ON DUPLICATE KEY UPDATE settingValue = VALUES(settingValue), updatedBy = VALUES(updatedBy)`,
+    [key, cleaned, updatedBy]
+  );
+}
+
+// ── Xendit (Payment Sessions API — GCash / Maya / cards via Xendit) ──
+// Docs: https://docs.xendit.co/docs/payment-sessions-overview
 async function xenditRequest(path, body) {
+  const secretKey = await getSetting('xendit_secret_key');
+  if (!secretKey) {
+    throw new Error('Xendit / GCash secret key is not configured. Set it in Admin → Settings.');
+  }
   const res = await fetch(`https://api.xendit.co${path}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       // Xendit uses HTTP Basic auth: secret key as the username, blank password.
-      'Authorization': 'Basic ' + Buffer.from(`${XENDIT_SECRET_KEY}:`).toString('base64'),
+      'Authorization': 'Basic ' + Buffer.from(`${secretKey}:`).toString('base64'),
     },
     body: JSON.stringify(body),
   });
@@ -163,10 +382,11 @@ async function xenditRequest(path, body) {
 
 // Xendit signs webhooks with a fixed verification token in the x-callback-token header —
 // a plain (constant-time) string compare against your Dashboard token, no HMAC needed.
-function verifyXenditWebhook(headerToken) {
+async function verifyXenditWebhook(headerToken) {
   const crypto = require('crypto');
-  if (!headerToken || headerToken.length !== XENDIT_WEBHOOK_TOKEN.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(headerToken), Buffer.from(XENDIT_WEBHOOK_TOKEN));
+  const expected = await getSetting('xendit_webhook_token');
+  if (!expected || !headerToken || headerToken.length !== expected.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(headerToken), Buffer.from(expected));
 }
 
 // ====================== ROUTES ======================
@@ -631,55 +851,207 @@ app.put('/api/rider/bookings/:id/status', async (req, res) => {
   }
 });
 
-// Driving directions from rider GPS → drop-off (OSRM free public API)
-app.get('/api/rider/route', async (req, res) => {
-  try {
-    const { fromLat, fromLng, toLat, toLng } = req.query;
-    if (![fromLat, fromLng, toLat, toLng].every(Boolean))
-      return res.status(400).json({ success: false, message: 'from/to lat,lng required' });
+// Driving directions — Geoapify Routing (MapLibre-friendly), with OSRM/straight fallbacks
+async function geoapifyRoute(waypoints, { alternatives = false, optimize = false } = {}) {
+  const key = await getSetting('geoapify_api_key');
+  if (!key) {
+    const err = new Error('Geoapify API key is not configured');
+    err.code = 'GEOAPIFY_NOT_CONFIGURED';
+    throw err;
+  }
+  // waypoints: [{lat,lng}, ...] — Geoapify expects lat,lng joined by |
+  const wp = waypoints
+    .map((p) => `${Number(p.lat)},${Number(p.lng)}`)
+    .join('|');
+  const params = new URLSearchParams({
+    waypoints: wp,
+    mode: 'drive',
+    details: 'instruction_details',
+    apiKey: key,
+  });
+  if (alternatives) params.set('alternatives', '1');
+  if (optimize) params.set('optimize_waypoints', 'true'); // keep if supported; also try optimize_stops below
+  if (optimize) params.set('optimize_stops', 'true');
 
-    const osrmRes = await fetch(
-      `http://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}` +
-      `?overview=full&geometries=geojson&alternatives=true&steps=true`
-    );
-    const data = await osrmRes.json();
-    if (data.code !== 'Ok' || !data.routes?.[0])
-      return res.status(500).json({ success: false, message: 'Could not build route' });
+  const url = `https://api.geoapify.com/v1/routing?${params.toString()}`;
+  const res = await fetch(url);
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(data?.message || `Geoapify routing failed (${res.status})`);
+  }
+  return data;
+}
 
-    const routes = data.routes.map((route, index) => {
-      const steps = (route.legs || []).flatMap((leg) =>
+function flattenGeoapifyCoords(geometry) {
+  if (!geometry) return [];
+  if (geometry.type === 'LineString') return geometry.coordinates || [];
+  if (geometry.type === 'MultiLineString') {
+    return (geometry.coordinates || []).flat();
+  }
+  return [];
+}
+
+function parseGeoapifyRoutes(data) {
+  const features = Array.isArray(data?.features) ? data.features : [];
+  // Some responses nest under results (format=json)
+  if (!features.length && Array.isArray(data?.results)) {
+    return data.results.map((result, index) => {
+      const coords = flattenGeoapifyCoords(result.geometry) ||
+        (result.legs || []).flatMap((leg) => flattenGeoapifyCoords(leg.geometry));
+      const steps = (result.legs || []).flatMap((leg) =>
         (leg.steps || []).map((step) => ({
-          name: step.name || '',
-          ref: step.ref || '',
-          type: step.maneuver?.type || 'continue',
-          modifier: step.maneuver?.modifier || '',
-          distanceM: step.distance,
-          durationS: step.duration,
+          name: step.road_name || step.name || step.instruction?.text || '',
+          ref: '',
+          type: step.instruction?.type || step.maneuver?.type || 'continue',
+          modifier: step.instruction?.modifier || step.maneuver?.modifier || '',
+          distanceM: step.distance ?? step.distance_m ?? 0,
+          durationS: step.time ?? step.duration ?? 0,
         }))
       );
       return {
         index,
-        geometry: route.geometry.coordinates, // [lng, lat][]
-        distanceM: route.distance,
-        durationS: route.duration,
+        geometry: coords,
+        distanceM: result.distance ?? result.distance_m ?? 0,
+        durationS: result.time ?? result.duration ?? 0,
         steps,
+        fallback: false,
+        provider: 'geoapify',
       };
-    });
+    }).filter((r) => r.geometry.length >= 2);
+  }
 
-    const route = routes[0];
-    res.json({
-      geometry: route.geometry,
-      distanceM: route.distanceM,
-      durationS: route.durationS,
+  return features.map((feature, index) => {
+    const props = feature.properties || {};
+    const coords = flattenGeoapifyCoords(feature.geometry);
+    const steps = (props.legs || []).flatMap((leg) =>
+      (leg.steps || []).map((step) => ({
+        name: step.road_name || step.name || step.instruction?.text || '',
+        ref: '',
+        type: step.instruction?.type || 'continue',
+        modifier: step.instruction?.modifier || '',
+        distanceM: step.distance ?? 0,
+        durationS: step.time ?? 0,
+      }))
+    );
+    return {
+      index,
+      geometry: coords,
+      distanceM: props.distance ?? 0,
+      durationS: props.time ?? 0,
+      steps,
+      fallback: false,
+      provider: 'geoapify',
+    };
+  }).filter((r) => r.geometry.length >= 2);
+}
+
+app.get('/api/rider/route', async (req, res) => {
+  try {
+    const fromLat = parseFloat(req.query.fromLat);
+    const fromLng = parseFloat(req.query.fromLng);
+    const toLat = parseFloat(req.query.toLat);
+    const toLng = parseFloat(req.query.toLng);
+    if (![fromLat, fromLng, toLat, toLng].every(Number.isFinite)) {
+      return res.status(400).json({ success: false, message: 'from/to lat,lng required' });
+    }
+
+    const from = { lat: fromLat, lng: fromLng };
+    const to = { lat: toLat, lng: toLng };
+
+    // 1) Geoapify
+    try {
+      const data = await geoapifyRoute([from, to], { alternatives: true });
+      const routes = parseGeoapifyRoutes(data);
+      if (routes.length) {
+        const route = routes[0];
+        return res.json({
+          geometry: route.geometry,
+          distanceM: route.distanceM,
+          durationS: route.durationS,
+          steps: route.steps,
+          routes,
+          fallback: false,
+          provider: 'geoapify',
+        });
+      }
+      throw new Error('Empty Geoapify geometry');
+    } catch (geoErr) {
+      console.warn('Geoapify rider route failed:', geoErr.message);
+    }
+
+    // 2) OSRM
+    try {
+      const data = await fetchOsrmJson(
+        `/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}` +
+          `?overview=full&geometries=geojson&alternatives=true&steps=true`
+      );
+      const routes = (data.routes || []).map((route, index) => {
+        const steps = (route.legs || []).flatMap((leg) =>
+          (leg.steps || []).map((step) => ({
+            name: step.name || '',
+            ref: step.ref || '',
+            type: step.maneuver?.type || 'continue',
+            modifier: step.maneuver?.modifier || '',
+            distanceM: step.distance,
+            durationS: step.duration,
+          }))
+        );
+        return {
+          index,
+          geometry: route.geometry?.coordinates || [],
+          distanceM: route.distance,
+          durationS: route.duration,
+          steps,
+          fallback: false,
+          provider: 'osrm',
+        };
+      }).filter((r) => r.geometry.length >= 2);
+      if (routes.length) {
+        const route = routes[0];
+        return res.json({
+          geometry: route.geometry,
+          distanceM: route.distanceM,
+          durationS: route.durationS,
+          steps: route.steps,
+          routes,
+          fallback: false,
+          provider: 'osrm',
+          warning: 'Geoapify unavailable — using OSRM backup.',
+        });
+      }
+    } catch (osrmErr) {
+      console.warn('OSRM rider route failed:', osrmErr.message);
+    }
+
+    // 3) Straight line
+    const distanceM = haversineM(from, to);
+    const durationS = Math.max(60, Math.round((distanceM / 1000 / 25) * 3600));
+    const geometry = straightLineGeometry([from, to]);
+    const route = {
+      index: 0,
+      geometry,
+      distanceM,
+      durationS,
+      steps: [{ name: 'Direct path', ref: '', type: 'continue', modifier: '', distanceM, durationS }],
+      fallback: true,
+      provider: 'fallback',
+    };
+    return res.json({
+      geometry,
+      distanceM,
+      durationS,
       steps: route.steps,
-      routes,
+      routes: [route],
+      fallback: true,
+      provider: 'fallback',
+      warning: 'Live routing unavailable — showing a direct path.',
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-// ── DELIVERY ROUTE (optimized stop order via OSRM's free public Trip API) ──
+// ── DELIVERY ROUTE (multi-stop via Geoapify, OSRM trip fallback) ──
 app.get('/api/delivery-route', async (req, res) => {
   try {
     const [orders] = await pool.query(
@@ -690,34 +1062,82 @@ app.get('/api/delivery-route', async (req, res) => {
     );
 
     if (orders.length === 0) {
-      return res.json({ depot: DEPOT, stops: [], geometry: [] });
+      return res.json({ depot: DEPOT, stops: [], geometry: [], fallback: false, provider: 'none' });
     }
 
-    // OSRM wants "lng,lat" pairs, depot first so the trip starts there.
-    const coordString = [DEPOT, ...orders].map(o => `${o.lng},${o.lat}`).join(';');
+    const stopPoints = orders.map((o) => ({ lat: Number(o.lat), lng: Number(o.lng), order: o }));
 
-    const osrmRes = await fetch(
-      `http://router.project-osrm.org/trip/v1/driving/${coordString}` +
-      `?source=first&roundtrip=false&geometries=geojson&overview=full`
-    );
-    const trip = await osrmRes.json();
-
-    if (trip.code !== 'Ok') {
-      return res.status(500).json({ success: false, message: 'Route optimization failed', detail: trip });
+    // Geoapify: depot → stops (optimize intermediate order when possible)
+    try {
+      const waypoints = [DEPOT, ...stopPoints];
+      // Need fixed end for optimize_stops — duplicate last stop as destination
+      if (waypoints.length >= 3) {
+        waypoints.push(stopPoints[stopPoints.length - 1]);
+      }
+      const data = await geoapifyRoute(waypoints, { optimize: waypoints.length >= 4 });
+      const routes = parseGeoapifyRoutes(data);
+      if (routes[0]?.geometry?.length >= 2) {
+        // Prefer waypoint order from properties if present
+        let stops = orders;
+        const props = data.features?.[0]?.properties;
+        const ordered = props?.waypoints || data.results?.[0]?.waypoints;
+        if (Array.isArray(ordered) && ordered.length) {
+          const idxs = ordered
+            .map((w) => w.original_index ?? w.originalIndex)
+            .filter((i) => i != null && i > 0 && i <= orders.length)
+            .map((i) => i - 1);
+          const uniq = [...new Set(idxs)];
+          if (uniq.length) stops = uniq.map((i) => orders[i]).filter(Boolean);
+        }
+        return res.json({
+          depot: DEPOT,
+          stops,
+          geometry: routes[0].geometry,
+          fallback: false,
+          provider: 'geoapify',
+        });
+      }
+      throw new Error('Empty Geoapify multi-stop geometry');
+    } catch (geoErr) {
+      console.warn('Geoapify delivery route failed:', geoErr.message);
     }
 
-    // waypoints[i] corresponds to input point i (0 = depot, 1..n = orders[0..n-1]).
-    // waypoint_index is where that point falls in the OPTIMIZED visiting order.
-    const stops = trip.waypoints
-      .map((wp, inputIndex) => ({ inputIndex, tripOrder: wp.waypoint_index }))
-      .filter(w => w.inputIndex !== 0)
-      .sort((a, b) => a.tripOrder - b.tripOrder)
-      .map(w => orders[w.inputIndex - 1]);
+    // OSRM trip fallback
+    try {
+      const points = [DEPOT, ...orders.map((o) => ({ lat: Number(o.lat), lng: Number(o.lng) }))];
+      const coordString = points.map((o) => `${o.lng},${o.lat}`).join(';');
+      const trip = await fetchOsrmJson(
+        `/trip/v1/driving/${coordString}?source=first&roundtrip=false&geometries=geojson&overview=full`
+      );
+      if (!trip.trips?.[0]?.geometry?.coordinates) throw new Error('OSRM trip empty');
+      const stops = trip.waypoints
+        .map((wp, inputIndex) => ({ inputIndex, tripOrder: wp.waypoint_index }))
+        .filter((w) => w.inputIndex !== 0)
+        .sort((a, b) => a.tripOrder - b.tripOrder)
+        .map((w) => orders[w.inputIndex - 1]);
+      return res.json({
+        depot: DEPOT,
+        stops,
+        geometry: trip.trips[0].geometry.coordinates,
+        fallback: false,
+        provider: 'osrm',
+        warning: 'Geoapify unavailable — using OSRM backup.',
+      });
+    } catch (osrmErr) {
+      console.warn('OSRM delivery trip failed:', osrmErr.message);
+    }
 
-    res.json({
+    const geometry = straightLineGeometry([
+      DEPOT,
+      ...orders.map((o) => ({ lat: Number(o.lat), lng: Number(o.lng) })),
+    ]);
+    return res.json({
       depot: DEPOT,
-      stops,
-      geometry: trip.trips[0].geometry.coordinates, // array of [lng, lat]
+      stops: orders,
+      geometry,
+      fallback: true,
+      provider: 'fallback',
+      warning: 'Live routing unavailable — showing a straight-line path between stops.',
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -765,6 +1185,14 @@ app.post('/api/checkout', async (req, res) => {
 
     const [[user]] = await pool.query('SELECT fullName, email FROM users WHERE id = ?', [userId]);
 
+    const backendPublicUrl = await getSetting('backend_public_url');
+    if (!backendPublicUrl) {
+      return res.status(503).json({
+        success: false,
+        message: 'Backend public URL is not configured. Set it in Admin → Settings (needed for GCash return links).',
+      });
+    }
+
     const session = await xenditRequest('/sessions', {
       reference_id: newId, // carried straight through to the webhook — used to find this order again
       session_type: 'PAY',
@@ -779,8 +1207,8 @@ app.post('/api/checkout', async (req, res) => {
         email: user?.email || undefined,
         individual_detail: { given_names: user?.fullName || 'Customer' },
       },
-      success_return_url: `${BACKEND_PUBLIC_URL}/return?checkout=success&orderId=${newId}`,
-      cancel_return_url:  `${BACKEND_PUBLIC_URL}/return?checkout=cancel&orderId=${newId}`,
+      success_return_url: `${backendPublicUrl}/return?checkout=success&orderId=${newId}`,
+      cancel_return_url:  `${backendPublicUrl}/return?checkout=cancel&orderId=${newId}`,
     });
 
     await pool.query('UPDATE orders SET checkoutSessionId = ? WHERE id = ?', [session.payment_session_id, newId]);
@@ -796,7 +1224,7 @@ app.post('/api/checkout', async (req, res) => {
 // browser redirect — is the real source of truth for whether money changed hands.
 app.post('/api/webhooks/xendit', async (req, res) => {
   try {
-    if (!verifyXenditWebhook(req.headers['x-callback-token'])) {
+    if (!(await verifyXenditWebhook(req.headers['x-callback-token']))) {
       console.warn('Rejected webhook: bad or missing callback token');
       return res.status(401).json({ success: false, message: 'Invalid callback token' });
     }
@@ -1156,9 +1584,9 @@ async function fetchPendingDeliveryRecipients() {
 }
 
 async function sendSemaphoreSms({ number, message }) {
-  const apikey = process.env.SEMAPHORE_API_KEY;
-  if (!apikey || apikey.includes('your_')) {
-    const err = new Error('SEMAPHORE_API_KEY is not configured on the server.');
+  const apikey = await getSetting('semaphore_api_key');
+  if (!apikey) {
+    const err = new Error('Semaphore API key is not configured. Set it in Admin → Settings.');
     err.code = 'SMS_NOT_CONFIGURED';
     throw err;
   }
@@ -1167,9 +1595,8 @@ async function sendSemaphoreSms({ number, message }) {
   body.set('apikey', apikey);
   body.set('number', number);
   body.set('message', message);
-  if (process.env.SEMAPHORE_SENDER_NAME) {
-    body.set('sendername', process.env.SEMAPHORE_SENDER_NAME);
-  }
+  const senderName = await getSetting('semaphore_sender_name');
+  if (senderName) body.set('sendername', senderName);
 
   const resp = await fetch(SEMAPHORE_API_URL, {
     method: 'POST',
@@ -1190,28 +1617,118 @@ async function sendSemaphoreSms({ number, message }) {
 }
 
 app.get('/api/sms/status', async (req, res) => {
-  const configured = Boolean(process.env.SEMAPHORE_API_KEY && !process.env.SEMAPHORE_API_KEY.includes('your_'));
-  const payload = {
-    configured,
-    senderName: process.env.SEMAPHORE_SENDER_NAME || null,
-    provider: 'Semaphore',
-  };
-  if (!configured) return res.json(payload);
-
   try {
-    const url = `${SEMAPHORE_ACCOUNT_URL}?apikey=${encodeURIComponent(process.env.SEMAPHORE_API_KEY)}`;
-    const resp = await fetch(url);
-    const data = await resp.json().catch(() => null);
-    if (resp.ok && data) {
-      payload.account = {
-        creditBalance: data.credit_balance ?? data.balance ?? null,
-        accountName: data.account_name || data.name || null,
-      };
+    const apikey = await getSetting('semaphore_api_key');
+    const senderName = await getSetting('semaphore_sender_name');
+    const payload = {
+      configured: Boolean(apikey),
+      senderName: senderName || null,
+      provider: 'Semaphore',
+      source: await getSettingSource('semaphore_api_key'),
+    };
+    if (!apikey) return res.json(payload);
+
+    try {
+      const url = `${SEMAPHORE_ACCOUNT_URL}?apikey=${encodeURIComponent(apikey)}`;
+      const resp = await fetch(url);
+      const data = await resp.json().catch(() => null);
+      if (resp.ok && data) {
+        payload.account = {
+          creditBalance: data.credit_balance ?? data.balance ?? null,
+          accountName: data.account_name || data.name || null,
+        };
+      }
+    } catch {
+      // Account lookup is optional — sending can still work.
     }
-  } catch {
-    // Account lookup is optional — sending can still work.
+    res.json(payload);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
-  res.json(payload);
+});
+
+// ── ADMIN SETTINGS (Xendit/GCash + Semaphore) ──
+app.get('/api/settings', async (req, res) => {
+  try {
+    const settings = await getPublicSettings();
+    res.json({
+      settings,
+      groups: {
+        payments: {
+          title: 'GCash / Xendit payments',
+          keys: ['xendit_secret_key', 'xendit_webhook_token', 'backend_public_url'],
+        },
+        sms: {
+          title: 'Semaphore SMS',
+          keys: ['semaphore_api_key', 'semaphore_sender_name'],
+        },
+        maps: {
+          title: 'MapLibre + Geoapify',
+          keys: ['geoapify_api_key'],
+        },
+      },
+    });
+  } catch (err) {
+    console.error('Failed to load settings:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Public map config for MapLibre (API key is restricted by Geoapify domain rules)
+app.get('/api/maps/config', async (req, res) => {
+  try {
+    const apiKey = await getSetting('geoapify_api_key');
+    res.json({
+      provider: 'geoapify',
+      apiKey: apiKey || '',
+      configured: Boolean(apiKey),
+      styles: {
+        light: apiKey
+          ? `https://maps.geoapify.com/v1/styles/osm-bright/style.json?apiKey=${encodeURIComponent(apiKey)}`
+          : null,
+        dark: apiKey
+          ? `https://maps.geoapify.com/v1/styles/dark-matter/style.json?apiKey=${encodeURIComponent(apiKey)}`
+          : null,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.put('/api/settings', async (req, res) => {
+  try {
+    const incoming = req.body?.settings || {};
+    const updatedBy = req.body?.updatedBy || 'Admin';
+    const allowed = Object.keys(SETTINGS_META);
+    const changed = [];
+
+    for (const key of allowed) {
+      if (!Object.prototype.hasOwnProperty.call(incoming, key)) continue;
+      const next = incoming[key];
+      // null/undefined = leave unchanged; '' = clear admin override (fall back to .env)
+      if (next === null || next === undefined) continue;
+      if (SETTINGS_META[key].secret && String(next).includes('•')) {
+        // Ignore masked placeholder submissions
+        continue;
+      }
+      await upsertSetting(key, next, updatedBy);
+      changed.push(key);
+    }
+
+    await createNotification({
+      audience: 'admin',
+      message: changed.length
+        ? `Integration settings updated (${changed.join(', ')}).`
+        : 'Settings saved (no changes detected).',
+      type: 'System',
+    });
+
+    res.json({ success: true, changed, settings: await getPublicSettings() });
+  } catch (err) {
+    console.error('Failed to save settings:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 app.get('/api/sms/pending-deliveries', async (req, res) => {

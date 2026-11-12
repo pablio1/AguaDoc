@@ -5,78 +5,41 @@ import {
   CreditCard, Banknote, ArrowRight, ArrowLeft, Minus, Plus, Droplets, Zap,
   Sparkles, ShieldCheck,
 } from 'lucide-react';
-import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
 import { apiAddOrder, apiCreateCheckout, apiGeocode, apiReverseGeocode } from '../api';
 import { TermsModal } from '../components/TermsContent';
-import { CARTO_ATTRIBUTION, cartoVoyagerUrl } from '../lib/mapTiles';
+import GeoMap from '../components/map/GeoMap';
 import { formatMoney } from '../lib/money';
 
 const PRICE_PER_GALLON = 40;
 const DELIVERY_FEE = 20;
 const DEFAULT_CENTER = { lat: 10.3157, lng: 123.9740 }; // Lapu-Lapu / AguaDoc area
 
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-});
-
-const pinIcon = L.divIcon({
-  className: '',
-  html: `<div style="
+const pinHtml = `<div style="
     width:36px;height:36px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);
     background:linear-gradient(135deg,#3b82f6,#2563eb);border:3px solid #fff;
     box-shadow:0 6px 16px rgba(59,130,246,.4);display:flex;align-items:center;justify-content:center;
-  "><span style="transform:rotate(45deg);font-size:14px">💧</span></div>`,
-  iconSize: [36, 36],
-  iconAnchor: [18, 36],
-});
-
-function MapClickHandler({ onPick }) {
-  useMapEvents({
-    click(e) {
-      onPick({ lat: e.latlng.lat, lng: e.latlng.lng });
-    },
-  });
-  return null;
-}
-
-function RecenterOnPin({ lat, lng }) {
-  const map = useMap();
-  useEffect(() => {
-    if (lat != null && lng != null) map.panTo([lat, lng], { animate: true });
-  }, [lat, lng, map]);
-  return null;
-}
+  "><span style="transform:rotate(45deg);font-size:14px">💧</span></div>`;
 
 function DeliveryPinMap({ pin, onPinChange }) {
   return (
     <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-inner">
-      <MapContainer
-        center={[pin.lat, pin.lng]}
+      <GeoMap
+        theme="light"
+        center={pin}
         zoom={15}
-        style={{ height: 280, width: '100%' }}
-        scrollWheelZoom={false}
-      >
-        <TileLayer attribution={CARTO_ATTRIBUTION} url={cartoVoyagerUrl()} />
-        <MapClickHandler onPick={onPinChange} />
-        <RecenterOnPin lat={pin.lat} lng={pin.lng} />
-        <Marker
-          position={[pin.lat, pin.lng]}
-          icon={pinIcon}
-          draggable
-          eventHandlers={{
-            dragend: (e) => {
-              const { lat, lng } = e.target.getLatLng();
-              onPinChange({ lat, lng });
-            },
-          }}
-        />
-      </MapContainer>
-      <div className="pointer-events-none absolute bottom-3 left-3 right-3 z-[1000] flex justify-center">
+        className="h-[280px]"
+        onMapClick={onPinChange}
+        markers={[{
+          id: 'pin',
+          lat: pin.lat,
+          lng: pin.lng,
+          html: pinHtml,
+          anchor: 'bottom',
+          draggable: true,
+          onDragEnd: onPinChange,
+        }]}
+      />
+      <div className="pointer-events-none absolute bottom-3 left-3 right-3 z-[5] flex justify-center">
         <span className="rounded-full bg-white/95 px-3.5 py-1.5 text-[11px] font-semibold text-slate-600 shadow-md ring-1 ring-slate-200/80">
           Drag the pin or tap the map
         </span>

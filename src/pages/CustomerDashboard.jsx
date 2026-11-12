@@ -5,53 +5,18 @@ import {
   Store, Cog, Bike, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import BrandMark from '../components/BrandMark';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import GeoMap from '../components/map/GeoMap';
 import {
   apiGetOrders, apiUpdateUser, apiAcceptTerms, apiGetNotifications,
   apiMarkNotificationRead, apiMarkAllNotificationsRead, apiGetRiderLocation, apiGetRiderRoute,
 } from '../api';
 import RequestServicePage from './RequestServicePage';
 import { TermsModal, TermsGate, TERMS_VERSION } from '../components/TermsContent';
-import { CARTO_ATTRIBUTION, cartoVoyagerUrl } from '../lib/mapTiles';
 import { formatMoney } from '../lib/money';
 
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl:       'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl:     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-});
-const riderIcon = L.divIcon({
-  className: 'aguadoc-rider-marker',
-  html: `<div style="background:#16a34a;color:white;font-size:15px;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.5);">🛵</div>`,
-  iconSize: [30, 30], iconAnchor: [15, 15],
-});
-const homeIcon = L.divIcon({
-  className: 'aguadoc-home-marker',
-  html: `<div style="background:#3b82f6;color:white;font-size:15px;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.5);">🏠</div>`,
-  iconSize: [30, 30], iconAnchor: [15, 15],
-});
+const riderHtml = `<div style="background:#16a34a;color:white;font-size:15px;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.5);">🛵</div>`;
+const homeHtml = `<div style="background:#3b82f6;color:white;font-size:15px;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.5);">🏠</div>`;
 const RIDER_STALE_MS = 2 * 60 * 1000;
-
-function FitBounds({ points }) {
-  const map = useMap();
-  useEffect(() => {
-    const valid = (points || []).filter((p) => p?.[0] != null && p?.[1] != null);
-    if (valid.length >= 2) map.fitBounds(valid, { padding: [40, 40], maxZoom: 16 });
-    else if (valid.length === 1) map.setView(valid[0], 15);
-  }, [points, map]);
-  return null;
-}
-
-function RecenterOnRider({ lat, lng }) {
-  const map = useMap();
-  useEffect(() => {
-    if (lat != null && lng != null) map.panTo([lat, lng], { animate: true });
-  }, [lat, lng, map]);
-  return null;
-}
 
 const NAV = [
   { icon: LayoutDashboard, label: 'Dashboard',       id: 'dashboard', short: 'Home'      },
@@ -269,32 +234,39 @@ function OrderCard({
                 <div className={`h-64 overflow-hidden rounded-xl border sm:h-72 ${
                   isOutForDelivery ? 'border-emerald-200 shadow-lg shadow-emerald-500/10' : 'border-slate-200'
                 }`}>
-                  <MapContainer
+                  <GeoMap
                     key={`track-${order.id}`}
-                    center={center}
+                    theme="light"
+                    center={{ lat: center[0], lng: center[1] }}
                     zoom={14}
-                    style={{ height: '100%', width: '100%' }}
-                  >
-                    <TileLayer attribution={CARTO_ATTRIBUTION} url={cartoVoyagerUrl()} />
-                    <FitBounds points={[riderPos, homePos]} />
-                    {riderPos && <RecenterOnRider lat={riderPos[0]} lng={riderPos[1]} />}
-                    {homePos && (
-                      <Marker position={homePos} icon={homeIcon}>
-                        <Popup>Your delivery address</Popup>
-                      </Marker>
-                    )}
-                    {riderPos && (
-                      <Marker position={riderPos} icon={riderIcon}>
-                        <Popup>Your rider (live)</Popup>
-                      </Marker>
-                    )}
-                    {trackRoute.length > 1 && (
-                      <Polyline
-                        positions={trackRoute}
-                        pathOptions={{ color: '#3b82f6', weight: 5, opacity: 0.85 }}
-                      />
-                    )}
-                  </MapContainer>
+                    className="h-full"
+                    fitPoints={[riderPos, homePos].filter(Boolean)}
+                    follow={riderPos ? { enabled: true, lat: riderPos[0], lng: riderPos[1], bearing: 0, pitch: 0, zoom: 15 } : null}
+                    markers={[
+                      homePos && {
+                        id: 'home',
+                        lat: homePos[0],
+                        lng: homePos[1],
+                        html: homeHtml,
+                        popupHtml: 'Your delivery address',
+                      },
+                      riderPos && {
+                        id: 'rider',
+                        lat: riderPos[0],
+                        lng: riderPos[1],
+                        html: riderHtml,
+                        popupHtml: 'Your rider (live)',
+                      },
+                    ].filter(Boolean)}
+                    routes={trackRoute.length > 1 ? [{
+                      id: 'track',
+                      geometry: trackRoute,
+                      color: '#3b82f6',
+                      width: 5,
+                      opacity: 0.9,
+                    }] : []}
+                    geometryFormat="latlng"
+                  />
                 </div>
                 <p className={`mt-2 flex items-center justify-center gap-2 text-xs font-medium ${
                   riderIsLive ? 'text-emerald-600' : 'text-amber-600'

@@ -112,7 +112,11 @@ export async function apiUpdateRiderBookingStatus(orderId, riderId, status) {
 export async function apiGetRiderRoute(fromLat, fromLng, toLat, toLng) {
   const qs = new URLSearchParams({ fromLat, fromLng, toLat, toLng });
   const res = await fetch(`${BASE}/rider/route?${qs}`);
-  return res.json();
+  const result = await res.json().catch(() => ({ success: false, message: 'Invalid route response' }));
+  if (!res.ok && result.success !== false) {
+    return { success: false, message: result.message || `Route request failed (${res.status})` };
+  }
+  return result;
 }
 
 // PAYMENTS
@@ -262,5 +266,31 @@ export async function apiSendSms({ orderIds, message, sendAll = false } = {}) {
   });
   const result = await res.json();
   if (!res.ok) throw new Error(result.message || 'SMS send failed');
+  return result;
+}
+
+// MAPS (MapLibre + Geoapify)
+export async function apiGetMapsConfig() {
+  const res = await fetch(`${BASE}/maps/config`);
+  const result = await res.json();
+  if (!res.ok) throw new Error(result.message || 'Failed to load map config');
+  return result;
+}
+
+// ADMIN SETTINGS (Xendit/GCash + Semaphore + Geoapify)
+export async function apiGetSettings() {
+  const res = await fetch(`${BASE}/settings`);
+  const result = await res.json();
+  if (!res.ok) throw new Error(result.message || 'Failed to load settings');
+  return result;
+}
+export async function apiUpdateSettings({ settings, updatedBy } = {}) {
+  const res = await fetch(`${BASE}/settings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ settings, updatedBy }),
+  });
+  const result = await res.json();
+  if (!res.ok) throw new Error(result.message || 'Failed to save settings');
   return result;
 }

@@ -1,8 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, useMapEvents } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet-rotate';
-import 'leaflet/dist/leaflet.css';
 import {
   Bike, Package, MapPin, Navigation, CheckCircle2, LogOut,
   RefreshCw, Phone, Clock, ChevronRight, Radio, ArrowUp,
@@ -15,15 +11,8 @@ import {
   apiPostRiderLocation,
   apiGetRiderRoute,
 } from '../api';
-import { CARTO_ATTRIBUTION, cartoDarkUrl, cartoVoyagerUrl } from '../lib/mapTiles';
+import GeoMap from '../components/map/GeoMap';
 import { formatMoney } from '../lib/money';
-
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-});
 
 const DEPOT = [10.3157, 123.9740];
 
@@ -47,28 +36,8 @@ function distanceM(a, b) {
   return 2 * R * Math.asin(Math.sqrt(s));
 }
 
-function destinationPoint(lat, lng, bearingDeg, meters) {
-  const R = 6371000;
-  const δ = meters / R;
-  const θ = toRad(bearingDeg);
-  const φ1 = toRad(lat);
-  const λ1 = toRad(lng);
-  const φ2 = Math.asin(Math.sin(φ1) * Math.cos(δ) + Math.cos(φ1) * Math.sin(δ) * Math.cos(θ));
-  const λ2 = λ1 + Math.atan2(
-    Math.sin(θ) * Math.sin(δ) * Math.cos(φ1),
-    Math.cos(δ) - Math.sin(φ1) * Math.sin(φ2)
-  );
-  return [toDeg(φ2), toDeg(λ2)];
-}
-
-function shortestAngleDiff(from, to) {
-  return ((to - from + 540) % 360) - 180;
-}
-
-function makeArrowIcon(heading = 0) {
-  return L.divIcon({
-    className: 'rider-nav-arrow',
-    html: `<div style="width:52px;height:52px;display:flex;align-items:center;justify-content:center;transform:rotate(${heading}deg);">
+function arrowHtml(heading = 0) {
+  return `<div style="width:52px;height:52px;display:flex;align-items:center;justify-content:center;transform:rotate(${heading}deg);">
       <svg width="40" height="40" viewBox="0 0 40 40">
         <defs>
           <filter id="arrow-shadow" x="-40%" y="-40%" width="180%" height="180%">
@@ -78,18 +47,10 @@ function makeArrowIcon(heading = 0) {
         <circle cx="20" cy="20" r="11" fill="rgba(26,115,232,0.18)"/>
         <path filter="url(#arrow-shadow)" d="M20 3 L32 34 L20 27 L8 34 Z" fill="#1A73E8" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"/>
       </svg>
-    </div>`,
-    iconSize: [52, 52],
-    iconAnchor: [26, 26],
-  });
+    </div>`;
 }
 
-const dropIcon = L.divIcon({
-  className: 'rider-drop-icon',
-  html: `<div style="width:36px;height:36px;border-radius:12px;background:#0f172a;display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;border:2px solid #fff;box-shadow:0 6px 16px rgba(15,23,42,.35);">📍</div>`,
-  iconSize: [36, 36],
-  iconAnchor: [18, 18],
-});
+const dropHtml = `<div style="width:36px;height:36px;border-radius:12px;background:#0f172a;display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;border:2px solid #fff;box-shadow:0 6px 16px rgba(15,23,42,.35);">📍</div>`;
 
 function headingFromLine(gps, line) {
   if (!gps || !line?.length) return 0;
@@ -160,75 +121,6 @@ function routeLabel(route, index, fastestIdx, shortestIdx) {
   return `Route ${index + 1}`;
 }
 
-function FitBounds({ points, enabled }) {
-  const map = useMap();
-  useEffect(() => {
-    if (!enabled) return;
-    const valid = points.filter((p) => p?.[0] != null && p?.[1] != null);
-    if (valid.length >= 2) map.fitBounds(valid, { padding: [60, 60], maxZoom: 16 });
-    else if (valid.length === 1) map.setView(valid[0], 15);
-  }, [points, map, enabled]);
-  return null;
-}
-
-const NAV_ZOOM = 17.4;
-const NAV_PITCH = 48;
-const LOOKAHEAD_M = 110;
-
-function NavMapController({ follow, lat, lng, heading, pickingRoute, allPoints, onUserDrag }) {
-  const map = useMap();
-  const lastBearing = useRef(0);
-  const followBooted = useRef(false);
-
-  useMapEvents({
-    dragstart() {
-      onUserDrag();
-    },
-  });
-
-  useEffect(() => {
-    map.invalidateSize({ animate: false });
-    return () => {
-      if (typeof map.setPitch === 'function') map.setPitch(0, { animate: false });
-      if (typeof map.setBearing === 'function') map.setBearing(0, { animate: false });
-    };
-  }, [map]);
-
-  useEffect(() => {
-    if (pickingRoute) {
-      followBooted.current = false;
-      if (typeof map.setPitch === 'function') map.setPitch(0, { animate: true, duration: 0.3 });
-      if (typeof map.setBearing === 'function') map.setBearing(0, { animate: true, duration: 0.3 });
-      const valid = (allPoints || []).filter((p) => p?.[0] != null && p?.[1] != null);
-      if (valid.length >= 2) map.fitBounds(valid, { padding: [100, 100], maxZoom: 15 });
-      return;
-    }
-
-    if (!follow || lat == null || lng == null) {
-      followBooted.current = false;
-      return;
-    }
-
-    const target = Number.isFinite(heading) ? heading : lastBearing.current;
-    const smoothed = (lastBearing.current + shortestAngleDiff(lastBearing.current, target) * 0.4 + 360) % 360;
-    lastBearing.current = smoothed;
-
-    const look = destinationPoint(lat, lng, smoothed, LOOKAHEAD_M);
-    const firstLock = !followBooted.current;
-    followBooted.current = true;
-
-    map.setView(look, NAV_ZOOM, { animate: true, duration: firstLock ? 0.7 : 0.35 });
-    if (typeof map.setBearing === 'function') {
-      map.setBearing(smoothed, { animate: true, duration: firstLock ? 0.65 : 0.35 });
-    }
-    if (typeof map.setPitch === 'function') {
-      map.setPitch(NAV_PITCH, { animate: true, duration: firstLock ? 0.65 : 0.35 });
-    }
-  }, [follow, lat, lng, heading, pickingRoute, allPoints, map]);
-
-  return null;
-}
-
 const STATUS_PILL = {
   Pending: 'bg-amber-400/20 text-amber-100 ring-1 ring-amber-300/30',
   Assigned: 'bg-indigo-400/20 text-indigo-100 ring-1 ring-indigo-300/30',
@@ -251,13 +143,17 @@ export default function RiderDashboard({ user, onLogout }) {
   const [sharing, setSharing] = useState(false);
   const [routes, setRoutes] = useState([]);
   const [selectedRoute, setSelectedRoute] = useState(0);
+  const [routeStatus, setRouteStatus] = useState('idle'); // idle | loading | ready | fallback | error
+  const [routeWarning, setRouteWarning] = useState('');
+  const [routeTick, setRouteTick] = useState(0);
   const [navOpen, setNavOpen] = useState(false);
   const [follow, setFollow] = useState(true);
   const [pickingRoute, setPickingRoute] = useState(false);
   const watchRef = useRef(null);
   const lastGpsRef = useRef(null);
-  const lastFetchRef = useRef({ t: 0, lat: null, lng: null, destKey: null });
+  const lastFetchRef = useRef({ t: 0, lat: null, lng: null, destKey: null, ok: false });
   const selectedDurationRef = useRef(null);
+  const routeRequestRef = useRef(0);
 
   const showToast = (text, type = 'ok') => {
     setToast({ text, type });
@@ -348,49 +244,111 @@ export default function RiderDashboard({ user, onLogout }) {
   useEffect(() => {
     let cancelled = false;
     async function run() {
-      if (!gps || !activeOrder?.lat || !activeOrder?.lng) {
+      if (!activeOrder?.lat || !activeOrder?.lng) {
         setRoutes([]);
+        setRouteStatus('idle');
+        setRouteWarning('');
         return;
       }
-      const destKey = `${activeOrder.id}:${activeOrder.lat},${activeOrder.lng}`;
+      // Keep the last drawn route if GPS briefly drops — clearing made the line "disappear".
+      if (!gps) {
+        setRouteStatus((s) => (s === 'ready' || s === 'fallback' ? s : 'loading'));
+        return;
+      }
+
+      const destKey = `${activeOrder.id}:${Number(activeOrder.lat)},${Number(activeOrder.lng)}`;
       const prev = lastFetchRef.current;
       const moved = prev.lat != null ? distanceM({ lat: prev.lat, lng: prev.lng }, gps) : 9999;
       const elapsed = Date.now() - prev.t;
       const destChanged = prev.destKey !== destKey;
-      if (!destChanged && elapsed < 8000 && moved < 50) return;
+      const force = routeTick > 0;
+      // Only throttle successful fetches. Failed ones must retry quickly.
+      if (!force && !destChanged && prev.ok && elapsed < 8000 && moved < 50) return;
 
-      lastFetchRef.current = { t: Date.now(), lat: gps.lat, lng: gps.lng, destKey };
-      const data = await apiGetRiderRoute(gps.lat, gps.lng, activeOrder.lat, activeOrder.lng);
-      if (cancelled || data.success === false) return;
+      const requestId = ++routeRequestRef.current;
+      setRouteStatus((s) => (s === 'ready' || s === 'fallback' ? s : 'loading'));
 
-      const nextRoutes = Array.isArray(data.routes) && data.routes.length
-        ? data.routes
-        : [{
-            index: 0,
-            geometry: data.geometry || [],
-            distanceM: data.distanceM,
-            durationS: data.durationS,
-            steps: data.steps || [],
-          }];
+      try {
+        const data = await apiGetRiderRoute(gps.lat, gps.lng, activeOrder.lat, activeOrder.lng);
+        if (cancelled || requestId !== routeRequestRef.current) return;
 
-      let keep = 0;
-      if (selectedDurationRef.current != null) {
-        let bestDiff = Infinity;
-        nextRoutes.forEach((r, i) => {
-          const diff = Math.abs((r.durationS || 0) - selectedDurationRef.current);
-          if (diff < bestDiff) {
-            bestDiff = diff;
-            keep = i;
-          }
-        });
+        if (data.success === false) {
+          lastFetchRef.current = {
+            t: Date.now(),
+            lat: gps.lat,
+            lng: gps.lng,
+            destKey,
+            ok: false,
+          };
+          setRouteStatus((s) => (s === 'ready' || s === 'fallback' ? s : 'error'));
+          setRouteWarning(data.message || 'Could not build route. Tap retry.');
+          return;
+        }
+
+        const nextRoutes = (Array.isArray(data.routes) && data.routes.length
+          ? data.routes
+          : [{
+              index: 0,
+              geometry: data.geometry || [],
+              distanceM: data.distanceM,
+              durationS: data.durationS,
+              steps: data.steps || [],
+              fallback: Boolean(data.fallback),
+            }]
+        ).filter((r) => Array.isArray(r.geometry) && r.geometry.length >= 2);
+
+        if (!nextRoutes.length) {
+          lastFetchRef.current = { t: Date.now(), lat: gps.lat, lng: gps.lng, destKey, ok: false };
+          setRouteStatus('error');
+          setRouteWarning('Route came back empty. Tap retry.');
+          return;
+        }
+
+        let keep = 0;
+        if (selectedDurationRef.current != null) {
+          let bestDiff = Infinity;
+          nextRoutes.forEach((r, i) => {
+            const diff = Math.abs((r.durationS || 0) - selectedDurationRef.current);
+            if (diff < bestDiff) {
+              bestDiff = diff;
+              keep = i;
+            }
+          });
+        }
+
+        lastFetchRef.current = {
+          t: Date.now(),
+          lat: gps.lat,
+          lng: gps.lng,
+          destKey,
+          ok: true,
+        };
+        setRoutes(nextRoutes);
+        setSelectedRoute(Math.min(keep, nextRoutes.length - 1));
+        selectedDurationRef.current = nextRoutes[keep]?.durationS ?? null;
+        setRouteStatus(data.fallback ? 'fallback' : 'ready');
+        setRouteWarning(data.fallback ? (data.warning || 'Showing direct path (live routing unavailable).') : '');
+      } catch (err) {
+        if (cancelled || requestId !== routeRequestRef.current) return;
+        lastFetchRef.current = {
+          t: Date.now(),
+          lat: gps.lat,
+          lng: gps.lng,
+          destKey,
+          ok: false,
+        };
+        setRouteStatus((s) => (s === 'ready' || s === 'fallback' ? s : 'error'));
+        setRouteWarning(err.message || 'Route request failed. Tap retry.');
       }
-      setRoutes(nextRoutes);
-      setSelectedRoute(keep);
-      selectedDurationRef.current = nextRoutes[keep]?.durationS ?? null;
     }
-    run().catch(() => {});
+    run();
     return () => { cancelled = true; };
-  }, [gps, activeOrder?.id, activeOrder?.lat, activeOrder?.lng]);
+  }, [gps, activeOrder?.id, activeOrder?.lat, activeOrder?.lng, routeTick]);
+
+  function retryRoute() {
+    lastFetchRef.current = { t: 0, lat: null, lng: null, destKey: null, ok: false };
+    setRouteTick((n) => n + 1);
+  }
 
   async function setStatus(order, status) {
     setBusyId(order.id);
@@ -456,10 +414,6 @@ export default function RiderDashboard({ user, onLogout }) {
     ? headingFromLine(gps, routeLine)
     : (gps?.heading ?? 0);
   const navigating = navOpen && Boolean(activeOrder);
-  const arrowIcon = useMemo(
-    () => makeArrowIcon(navigating && follow ? 0 : heading),
-    [navigating, follow, heading]
-  );
   const banner = bannerCopy(currentRoute?.steps);
 
   const fastestIdx = routes.reduce((best, r, i, arr) => (
@@ -484,77 +438,64 @@ export default function RiderDashboard({ user, onLogout }) {
       )}
 
       <div className="absolute inset-0">
-        <MapContainer
-          center={mapCenter}
+        <GeoMap
+          theme={navigating ? 'light' : 'dark'}
+          center={{ lat: mapCenter[0], lng: mapCenter[1] }}
           zoom={14}
-          zoomControl={false}
-          zoomSnap={0}
-          rotate
-          bearing={0}
-          pitch={0}
-          rotateControl={false}
-          touchRotate={false}
-          pitchDrag={false}
-          shiftKeyRotate={false}
-          style={{ height: '100%', width: '100%', background: navigating ? '#eef1f3' : '#0b1628' }}
-        >
-          <TileLayer
-            key={navigating ? 'light' : 'dark'}
-            attribution={CARTO_ATTRIBUTION}
-            url={navigating ? cartoVoyagerUrl() : cartoDarkUrl()}
-          />
-          {!navigating && <FitBounds points={fitPoints} enabled />}
-          {navigating && (
-            <NavMapController
-              follow={follow}
-              lat={gps?.lat}
-              lng={gps?.lng}
-              heading={heading}
-              pickingRoute={pickingRoute}
-              allPoints={allRoutePoints}
-              onUserDrag={() => setFollow(false)}
-            />
-          )}
-          {gps && (
-            <Marker key={`arrow-${Math.round(heading)}`} position={[gps.lat, gps.lng]} icon={arrowIcon} zIndexOffset={800}>
-              <Popup>You are here</Popup>
-            </Marker>
-          )}
-          {activeOrder?.lat != null && activeOrder?.lng != null && (
-            <Marker position={[Number(activeOrder.lat), Number(activeOrder.lng)]} icon={dropIcon}>
-              <Popup>
-                <strong>{activeOrder.ref}</strong>
-                <br />
-                {activeOrder.address}
-              </Popup>
-            </Marker>
-          )}
-          {routes.map((route, i) => {
-            if (i === selectedRoute) return null;
-            const positions = (route.geometry || []).map(([lng, lat]) => [lat, lng]);
-            if (positions.length < 2) return null;
-            return (
-              <Polyline
-                key={`alt-${i}`}
-                positions={positions}
-                eventHandlers={{ click: () => chooseRoute(i) }}
-                pathOptions={{ color: '#8AB4F8', weight: 7, opacity: 0.85, lineCap: 'round', lineJoin: 'round' }}
-              />
-            );
-          })}
-          {routeLine.length > 1 && (
-            <>
-              <Polyline
-                positions={routeLine}
-                pathOptions={{ color: '#fff', weight: 12, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }}
-              />
-              <Polyline
-                positions={routeLine}
-                pathOptions={{ color: '#1A73E8', weight: 7, opacity: 1, lineCap: 'round', lineJoin: 'round' }}
-              />
-            </>
-          )}
-        </MapContainer>
+          className="h-full w-full"
+          fitPoints={!navigating || pickingRoute ? [...fitPoints.filter(Boolean), ...allRoutePoints] : null}
+          onUserDrag={() => setFollow(false)}
+          follow={
+            navigating && !pickingRoute
+              ? {
+                  enabled: follow && Boolean(gps),
+                  lat: gps?.lat,
+                  lng: gps?.lng,
+                  bearing: heading,
+                  pitch: 50,
+                  zoom: 17.2,
+                  resetNorth: !follow,
+                }
+              : { enabled: false, resetNorth: true }
+          }
+          markers={[
+            gps && {
+              id: 'rider',
+              lat: gps.lat,
+              lng: gps.lng,
+              html: arrowHtml(navigating && follow ? 0 : heading),
+              popupHtml: 'You are here',
+            },
+            activeOrder?.lat != null && activeOrder?.lng != null && {
+              id: 'drop',
+              lat: Number(activeOrder.lat),
+              lng: Number(activeOrder.lng),
+              html: dropHtml,
+              popupHtml: `<strong>${activeOrder.ref || ''}</strong><br/>${activeOrder.address || ''}`,
+            },
+          ].filter(Boolean)}
+          routes={[
+            ...routes.map((route, i) => {
+              if (i === selectedRoute) return null;
+              if (!route.geometry || route.geometry.length < 2) return null;
+              return {
+                id: `alt-${i}`,
+                geometry: route.geometry,
+                color: '#8AB4F8',
+                width: 6,
+                opacity: 0.85,
+                onClick: () => chooseRoute(i),
+              };
+            }).filter(Boolean),
+            routeLine.length > 1 && {
+              id: 'active',
+              geometry: currentRoute?.geometry || [],
+              color: '#1A73E8',
+              width: 7,
+              opacity: 1,
+            },
+          ].filter(Boolean)}
+        />
       </div>
 
       {!navigating && (
@@ -639,6 +580,28 @@ export default function RiderDashboard({ user, onLogout }) {
             {!gps && !gpsError && (
               <p className="mx-auto mt-2 max-w-xl rounded-xl bg-white/90 px-3 py-2 text-center text-xs font-medium text-slate-600 shadow-sm">
                 Waiting for GPS so we can draw your route…
+              </p>
+            )}
+            {gps && routeLine.length < 2 && (
+              <div className="mx-auto mt-2 flex max-w-xl items-center justify-between gap-2 rounded-xl bg-white/95 px-3 py-2 text-xs font-medium text-slate-700 shadow-sm ring-1 ring-slate-200">
+                <span>
+                  {routeStatus === 'loading'
+                    ? 'Drawing route…'
+                    : routeWarning || 'Route not showing yet.'}
+                </span>
+                <button
+                  type="button"
+                  onClick={retryRoute}
+                  className="inline-flex items-center gap-1 rounded-lg bg-sky-600 px-2.5 py-1 text-[11px] font-bold text-white"
+                >
+                  <RefreshCw size={12} className={routeStatus === 'loading' ? 'animate-spin' : ''} />
+                  Retry
+                </button>
+              </div>
+            )}
+            {gps && routeLine.length > 1 && routeWarning && (
+              <p className="mx-auto mt-2 max-w-xl rounded-xl bg-amber-50 px-3 py-2 text-center text-xs font-medium text-amber-800 ring-1 ring-amber-200">
+                {routeWarning}
               </p>
             )}
           </div>

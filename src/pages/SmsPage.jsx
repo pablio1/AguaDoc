@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   AlertCircle,
   CheckCircle2,
@@ -8,6 +9,7 @@ import {
   RefreshCw,
   Search,
   Send,
+  Settings,
   Smartphone,
   Sparkles,
   Wifi,
@@ -199,7 +201,7 @@ export default function SmsPage() {
 
   async function handleSend() {
     if (!status.configured) {
-      showToast('❌ Add SEMAPHORE_API_KEY in backend/.env first.');
+      showToast('❌ Configure Semaphore in Admin → Settings first.');
       return;
     }
     if (selectedReady.length === 0) {
@@ -242,6 +244,12 @@ export default function SmsPage() {
         title="SMS Module"
         subtitle="Message customers with pending or undelivered orders through Semaphore."
       >
+        <Link
+          to="/settings"
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-ink shadow-sm hover:bg-slate-50"
+        >
+          <Settings size={14} /> API settings
+        </Link>
         <button
           type="button"
           onClick={load}
@@ -293,7 +301,7 @@ export default function SmsPage() {
                     ]
                       .filter(Boolean)
                       .join(' · ')
-                  : 'Add SEMAPHORE_API_KEY in backend/.env, then restart the backend.'}
+                  : 'Open Settings to add your Semaphore API key.'}
               </p>
             </div>
           </div>
@@ -575,9 +583,8 @@ export default function SmsPage() {
                 <div className="flex gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12px] text-amber-900">
                   <AlertCircle size={16} className="mt-0.5 shrink-0 text-amber-600" />
                   <p>
-                    Semaphore is offline until you set{' '}
-                    <code className="font-semibold">SEMAPHORE_API_KEY</code> in{' '}
-                    <code className="font-semibold">backend/.env</code>.
+                    Semaphore is offline until you add the API key under{' '}
+                    <strong>Settings → Semaphore SMS</strong>.
                   </p>
                 </div>
               )}

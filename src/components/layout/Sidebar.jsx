@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Users, ClipboardList, Map, CreditCard,
-  Droplets, BarChart3, Bell, Sparkles, LogOut, MessageSquareText, X,
+  Droplets, BarChart3, Bell, Sparkles, LogOut, MessageSquareText, X, Settings,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import BrandMark from '../BrandMark';
@@ -17,6 +17,7 @@ const navItems = [
   { path: '/payments', icon: CreditCard, label: 'Payments & Billing' },
   { path: '/notifications', icon: Bell, label: 'Notifications' },
   { path: '/predictions', icon: Sparkles, label: 'AI Predictions' },
+  { path: '/settings', icon: Settings, label: 'Settings' },
 ];
 
 export default function Sidebar({ onLogout, open = false, onClose }) {

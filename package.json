@@ -21,6 +21,7 @@
     "leaflet": "^1.9.4",
     "leaflet-rotate": "^0.5.2",
     "lucide-react": "^1.21.0",
+    "maplibre-gl": "^6.18.0",
     "mysql2": "^3.24.6",
     "react": "^19.2.6",
     "react-chartjs-2": "^5.3.1",

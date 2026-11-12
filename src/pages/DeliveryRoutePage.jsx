@@ -1,103 +1,42 @@
-import { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import { useEffect, useMemo, useState } from 'react';
 import { apiGetDeliveryRoute, apiUpdateOrder } from '../api';
-import { CARTO_ATTRIBUTION, cartoVoyagerUrl } from '../lib/mapTiles';
 import PageHeader from '../components/admin/PageHeader';
 import EmptyState from '../components/admin/EmptyState';
+import GeoMap from '../components/map/GeoMap';
 import { MapPin, Route } from 'lucide-react';
 
-// Vite/webpack break Leaflet's default marker icon paths — rebuild them from CDN so pins actually render.
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl:       'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl:     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-});
-
-// Numbered stop icon (1, 2, 3...) so the driver can match map pins to the sidebar list.
-function numberedIcon(n) {
-  return L.divIcon({
-    className: 'aguadoc-stop-marker',
-    html: `<div style="
+function stopMarkerHtml(n) {
+  return `<div style="
       background:#3B82F6;color:white;font-weight:700;font-size:13px;
       width:28px;height:28px;border-radius:50%;display:flex;
       align-items:center;justify-content:center;border:2px solid white;
       box-shadow:0 1px 4px rgba(0,0,0,0.4);
-    ">${n}</div>`,
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
-  });
+    ">${n}</div>`;
 }
 
-const depotIcon = L.divIcon({
-  className: 'aguadoc-depot-marker',
-  html: `<div style="
-    background:#0f2a4a;color:white;font-size:15px;
+const depotHtml = `<div style="
+    background:#0f2a4a;color:white;font-size:12px;font-weight:700;
     width:32px;height:32px;border-radius:8px;display:flex;
     align-items:center;justify-content:center;border:2px solid white;
     box-shadow:0 1px 4px rgba(0,0,0,0.4);
-  ">H₂O</div>`,
-  iconSize: [32, 32],
-  iconAnchor: [16, 16],
-});
-
-/** Leaflet often mounts before the flex container has its final size — grey tiles = wrong size. */
-function MapResizeFix({ deps = [] }) {
-  const map = useMap();
-  useEffect(() => {
-    const fix = () => map.invalidateSize({ animate: false });
-    fix();
-    const t1 = setTimeout(fix, 50);
-    const t2 = setTimeout(fix, 250);
-    window.addEventListener('resize', fix);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      window.removeEventListener('resize', fix);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, ...deps]);
-  return null;
-}
-
-function FitRoute({ depot, stops, routeLine }) {
-  const map = useMap();
-  useEffect(() => {
-    const points = [];
-    if (depot?.lat != null && depot?.lng != null) points.push([depot.lat, depot.lng]);
-    (stops || []).forEach((s) => {
-      if (s.lat != null && s.lng != null) points.push([Number(s.lat), Number(s.lng)]);
-    });
-    (routeLine || []).forEach((p) => {
-      if (p?.[0] != null && p?.[1] != null) points.push(p);
-    });
-    if (points.length >= 2) {
-      map.fitBounds(points, { padding: [40, 40], maxZoom: 15 });
-    } else if (points.length === 1) {
-      map.setView(points[0], 14);
-    }
-    setTimeout(() => map.invalidateSize({ animate: false }), 0);
-  }, [map, depot, stops, routeLine]);
-  return null;
-}
+  ">H₂O</div>`;
 
 export default function DeliveryRoutePage() {
-  const [data, setData]       = useState({ depot: null, stops: [], geometry: [] });
+  const [data, setData] = useState({ depot: null, stops: [], geometry: [] });
   const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState(null);
+  const [error, setError] = useState(null);
 
   const load = () => {
     setLoading(true);
     setError(null);
     apiGetDeliveryRoute()
-      .then(res => {
+      .then((res) => {
         if (res.success === false) {
           setError(res.message || 'Could not calculate route.');
-          setData({ depot: res.depot || null, stops: [], geometry: [] });
+          setData({ depot: res.depot || null, stops: [], geometry: [], fallback: false });
         } else {
           setData(res);
+          if (res.fallback && res.warning) setError(res.warning);
         }
       })
       .catch(() => setError('Could not reach the server.'))
@@ -108,105 +47,133 @@ export default function DeliveryRoutePage() {
 
   async function markDelivered(orderId) {
     await apiUpdateOrder(orderId, { status: 'Delivered' });
-    load(); // route shrinks as stops are completed
+    load();
   }
 
-  const center = data.depot ? [data.depot.lat, data.depot.lng] : [10.3157, 123.9740];
-  // Leaflet wants [lat, lng]; OSRM geometry comes back as [lng, lat] — flip it.
-  const routeLine = data.geometry?.map(([lng, lat]) => [lat, lng]) || [];
+  const routeLine = data.geometry || [];
+  const markers = useMemo(() => {
+    const list = [];
+    if (data.depot?.lat != null && data.depot?.lng != null) {
+      list.push({
+        id: 'depot',
+        lat: data.depot.lat,
+        lng: data.depot.lng,
+        html: depotHtml,
+        popupHtml: `<strong>${data.depot.name || 'AguaDoc Station'}</strong>`,
+      });
+    }
+    (data.stops || []).forEach((stop, i) => {
+      if (stop.lat == null || stop.lng == null) return;
+      list.push({
+        id: stop.id,
+        lat: Number(stop.lat),
+        lng: Number(stop.lng),
+        html: stopMarkerHtml(i + 1),
+        popupHtml: `<strong>${stop.ref || ''}</strong><br/>${stop.address || ''}`,
+      });
+    });
+    return list;
+  }, [data]);
+
+  const fitPoints = useMemo(() => {
+    const pts = [];
+    if (data.depot?.lat != null) pts.push([data.depot.lat, data.depot.lng]);
+    (data.stops || []).forEach((s) => {
+      if (s.lat != null && s.lng != null) pts.push([Number(s.lat), Number(s.lng)]);
+    });
+    return pts;
+  }, [data]);
+
+  const routes = useMemo(() => {
+    if (!routeLine || routeLine.length < 2) return [];
+    return [{
+      id: 'delivery',
+      geometry: routeLine,
+      color: data.fallback ? '#F59E0B' : '#3B82F6',
+      width: 5,
+      opacity: 0.95,
+    }];
+  }, [routeLine, data.fallback]);
 
   return (
     <div className="flex h-[calc(100dvh-7.5rem)] min-h-[480px] flex-col gap-4">
-      <PageHeader title="Live Delivery Map" subtitle="Optimized stops for pending deliveries with mapped addresses.">
+      <PageHeader title="Live Delivery Map" subtitle="Optimized stops powered by Geoapify (MapLibre).">
         <button type="button" onClick={load} className="agua-btn agua-btn-primary !py-2 !text-xs">
           Refresh route
         </button>
       </PageHeader>
 
-      <div className="flex min-h-0 flex-1 gap-4">
-      <div className="agua-card flex w-80 shrink-0 flex-col overflow-hidden p-4">
-        <div className="mb-3 flex items-center gap-2 border-b border-slate-100 pb-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-            <Route size={16} />
+      <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
+        <div className="agua-card flex max-h-[40vh] w-full shrink-0 flex-col overflow-hidden p-4 lg:max-h-none lg:w-80">
+          <div className="mb-3 flex items-center gap-2 border-b border-slate-100 pb-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+              <Route size={16} />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-ink">Route stops</p>
+              <p className="text-[11px] text-muted">
+                {loading ? 'Calculating…' : `${data.stops.length} pending`}
+                {data.provider ? ` · ${data.provider}` : ''}
+              </p>
+            </div>
           </div>
-          <div>
-            <p className="text-sm font-bold text-ink">Route stops</p>
-            <p className="text-[11px] text-muted">{loading ? 'Calculating…' : `${data.stops.length} pending`}</p>
-          </div>
-        </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {loading && <p className="py-4 text-center text-sm text-muted">Calculating best route…</p>}
-          {error && (
-            <p className="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
-          )}
-          {!loading && !error && data.stops.length === 0 && (
-            <EmptyState
-              icon={MapPin}
-              title="No mapped stops"
-              description="Pending deliveries with a geocoded address appear here and on the map."
-            />
-          )}
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {loading && <p className="py-4 text-center text-sm text-muted">Calculating best route…</p>}
+            {error && (
+              <p className={`mb-3 rounded-xl px-3 py-2 text-sm ${
+                data.fallback
+                  ? 'border border-amber-200 bg-amber-50 text-amber-800'
+                  : 'border border-red-100 bg-red-50 text-red-600'
+              }`}>
+                {error}
+              </p>
+            )}
+            {!loading && data.stops.length === 0 && (
+              <EmptyState
+                icon={MapPin}
+                title="No mapped stops"
+                description="Pending deliveries with a geocoded address appear here and on the map."
+              />
+            )}
 
-          <ol className="space-y-3">
-            {data.stops.map((stop, i) => (
-              <li key={stop.id} className="rounded-xl border border-slate-100 p-3 transition hover:border-blue-100 hover:bg-slate-50/80">
-                <div className="flex items-start gap-2">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-500 text-xs font-bold text-white">
-                    {i + 1}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-ink">{stop.ref}</p>
-                    <p className="truncate text-xs text-muted">{stop.address}</p>
-                    <p className="text-xs text-muted">{stop.quantity} gal • {stop.status}</p>
+            <ol className="space-y-3">
+              {data.stops.map((stop, i) => (
+                <li key={stop.id} className="rounded-xl border border-slate-100 p-3 transition hover:border-blue-100 hover:bg-slate-50/80">
+                  <div className="flex items-start gap-2">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-500 text-xs font-bold text-white">
+                      {i + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-ink">{stop.ref}</p>
+                      <p className="truncate text-xs text-muted">{stop.address}</p>
+                      <p className="text-xs text-muted">{stop.quantity} gal • {stop.status}</p>
+                    </div>
                   </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => markDelivered(stop.id)}
-                  className="mt-2 w-full rounded-lg border border-blue-200 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50"
-                >
-                  Mark Delivered
-                </button>
-              </li>
-            ))}
-          </ol>
+                  <button
+                    type="button"
+                    onClick={() => markDelivered(stop.id)}
+                    className="mt-2 w-full rounded-lg border border-blue-200 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50"
+                  >
+                    Mark Delivered
+                  </button>
+                </li>
+              ))}
+            </ol>
+          </div>
         </div>
-      </div>
 
-      {/* Map — absolute fill so Leaflet always gets a real pixel size */}
-      <div className="agua-card relative min-h-0 min-w-0 flex-1 overflow-hidden">
-        <MapContainer
-          center={center}
-          zoom={14}
-          className="absolute inset-0 z-0 h-full w-full"
-          style={{ height: '100%', width: '100%' }}
-        >
-          <TileLayer attribution={CARTO_ATTRIBUTION} url={cartoVoyagerUrl()} />
-          <MapResizeFix deps={[loading, data.stops.length, routeLine.length]} />
-          <FitRoute depot={data.depot} stops={data.stops} routeLine={routeLine} />
-
-          {data.depot && (
-            <Marker position={[data.depot.lat, data.depot.lng]} icon={depotIcon}>
-              <Popup>{data.depot.name || 'Station'}</Popup>
-            </Marker>
-          )}
-
-          {data.stops.map((stop, i) => (
-            <Marker key={stop.id} position={[Number(stop.lat), Number(stop.lng)]} icon={numberedIcon(i + 1)}>
-              <Popup>
-                <strong>{stop.ref}</strong><br />
-                {stop.address}<br />
-                {stop.quantity} gallons
-              </Popup>
-            </Marker>
-          ))}
-
-          {routeLine.length > 0 && (
-            <Polyline positions={routeLine} pathOptions={{ color: '#3B82F6', weight: 4 }} />
-          )}
-        </MapContainer>
-      </div>
+        <div className="agua-card min-h-[280px] flex-1 overflow-hidden p-0">
+          <GeoMap
+            theme="light"
+            center={data.depot || { lat: 10.3157, lng: 123.9740 }}
+            zoom={13}
+            markers={markers}
+            routes={routes}
+            fitPoints={fitPoints}
+            className="h-full min-h-[280px]"
+          />
+        </div>
       </div>
     </div>
   );
