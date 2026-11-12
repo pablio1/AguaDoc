@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import maplibregl from 'maplibre-gl';
+import { LngLatBounds, Map, Marker, NavigationControl, Popup } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { DEFAULT_CENTER, emptyLineCollection, geoStyleUrl, lineFeature, toLineCoords } from '../../lib/geoapify';
 import { apiGetMapsConfig } from '../../api';
@@ -70,7 +70,7 @@ export default function GeoMap({
           layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
         };
 
-      map = new maplibregl.Map({
+      map = new Map({
         container: containerRef.current,
         style: styleUrl,
         center: [Number(center.lng), Number(center.lat)],
@@ -78,7 +78,7 @@ export default function GeoMap({
         interactive,
         attributionControl: { compact: true },
       });
-      map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
+      map.addControl(new NavigationControl({ visualizePitch: true }), 'top-right');
       mapRef.current = map;
 
       map.on('load', () => {
@@ -195,14 +195,14 @@ export default function GeoMap({
         const el = wrap.firstElementChild || wrap;
         el.dataset.aguadocHtml = html;
         el.style.cursor = m.draggable ? 'grab' : 'pointer';
-        marker = new maplibregl.Marker({
+        marker = new Marker({
           element: el,
           anchor: m.anchor || 'center',
           draggable: Boolean(m.draggable),
         })
           .setLngLat([Number(m.lng), Number(m.lat)])
           .addTo(map);
-        if (m.popupHtml) marker.setPopup(new maplibregl.Popup({ offset: 16 }).setHTML(m.popupHtml));
+        if (m.popupHtml) marker.setPopup(new Popup({ offset: 16 }).setHTML(m.popupHtml));
         if (m.draggable && m.onDragEnd) {
           marker.on('dragend', () => {
             const { lng, lat } = marker.getLngLat();
@@ -215,7 +215,7 @@ export default function GeoMap({
         if (m.popupHtml) {
           const popup = marker.getPopup();
           if (popup) popup.setHTML(m.popupHtml);
-          else marker.setPopup(new maplibregl.Popup({ offset: 16 }).setHTML(m.popupHtml));
+          else marker.setPopup(new Popup({ offset: 16 }).setHTML(m.popupHtml));
         }
       }
     });
@@ -276,7 +276,7 @@ export default function GeoMap({
       map.easeTo({ center: [Number(valid[0][1]), Number(valid[0][0])], zoom: 15, duration: 500 });
       return;
     }
-    const bounds = new maplibregl.LngLatBounds();
+    const bounds = new LngLatBounds();
     valid.forEach(([lat, lng]) => bounds.extend([Number(lng), Number(lat)]));
     map.fitBounds(bounds, { padding: 60, maxZoom: 16, duration: 600 });
   }, [fitPoints]);
