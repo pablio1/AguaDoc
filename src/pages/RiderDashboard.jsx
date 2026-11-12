@@ -452,8 +452,8 @@ export default function RiderDashboard({ user, onLogout }) {
                   lat: gps?.lat,
                   lng: gps?.lng,
                   bearing: heading,
-                  pitch: 50,
-                  zoom: 17.2,
+                  pitch: 62,
+                  zoom: 18.8,
                   resetNorth: !follow,
                 }
               : { enabled: false, resetNorth: true }

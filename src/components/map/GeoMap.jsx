@@ -308,18 +308,18 @@ export default function GeoMap({
     const first = !followBooted.current;
     followBooted.current = true;
 
-    // Look slightly ahead along bearing
+    // Look ahead along bearing (Google Maps–style nav framing)
     const rad = (smoothed * Math.PI) / 180;
-    const aheadM = 90;
+    const aheadM = follow.aheadM ?? 55;
     const dLat = (aheadM / 111320) * Math.cos(rad);
     const dLng = (aheadM / (111320 * Math.cos((follow.lat * Math.PI) / 180))) * Math.sin(rad);
 
     map.easeTo({
       center: [Number(follow.lng) + dLng, Number(follow.lat) + dLat],
-      zoom: follow.zoom ?? 17.2,
+      zoom: follow.zoom ?? 18.8,
       bearing: smoothed,
-      pitch: follow.pitch ?? 50,
-      duration: first ? 700 : 350,
+      pitch: follow.pitch ?? 62,
+      duration: first ? 700 : 280,
       essential: true,
     });
   }, [follow]);
