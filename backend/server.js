@@ -3,6 +3,11 @@ const path    = require('path');
 const express = require('express');
 const cors    = require('cors');
 const mysql   = require('mysql2/promise');
+const {
+  getServiceProduct,
+  stockDeductionsForOrder,
+  DEFAULT_PRODUCT_ID,
+} = require('./lib/products');
 
 const app  = express();
 // Hostinger (and most hosts) inject PORT; keep 5000 for local XAMPP/dev.
@@ -805,20 +810,30 @@ app.put('/api/orders/:id/assign-rider', async (req, res) => {
 
 app.post('/api/orders', async (req, res) => {
   try {
-    const { userId, type, quantity, status, total, address, payMethod, priority, notes, lat: bodyLat, lng: bodyLng } = req.body;
+    const {
+      userId, type, quantity, status, total, address, payMethod, priority, notes,
+      lat: bodyLat, lng: bodyLng, productId: rawProductId,
+    } = req.body;
+    const product = getServiceProduct(rawProductId || DEFAULT_PRODUCT_ID);
     const newId  = id();
     const newRef = 'ORD-' + newId.slice(-6);
     const { lat, lng } = await resolveCoords({ lat: bodyLat, lng: bodyLng, address });
     await pool.query(
-      'INSERT INTO orders (id, ref, userId, type, quantity, status, total, address, payMethod, priority, notes, lat, lng) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
-      [newId, newRef, userId, type, quantity || 1, status || 'Pending', total || 0, address || '', payMethod || '', priority || 'normal', notes || '', lat, lng]
+      `INSERT INTO orders
+         (id, ref, userId, type, productId, productLabel, quantity, status, total, address, payMethod, priority, notes, lat, lng)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        newId, newRef, userId, type, product.id, product.label, quantity || 1,
+        status || 'Pending', total || 0, address || '', payMethod || '',
+        priority || 'normal', notes || '', lat, lng,
+      ]
     );
     const [rows] = await pool.query('SELECT * FROM orders WHERE id = ?', [newId]);
 
     const [[customer]] = await pool.query('SELECT fullName FROM users WHERE id = ?', [userId]);
     await createNotification({
       audience: 'admin',
-      message: `New ${type || 'delivery'} order from ${customer?.fullName || 'a customer'} — ${quantity || 1} gal.`,
+      message: `New ${type || 'delivery'} order from ${customer?.fullName || 'a customer'} — ${quantity || 1}× ${product.label}.`,
       type: 'Order',
     });
 
@@ -1504,15 +1519,23 @@ app.post('/api/rider-location', async (req, res) => {
 // since a customer reaching the success page proves nothing on its own.
 app.post('/api/checkout', async (req, res) => {
   try {
-    const { userId, type, quantity, priority, address, notes, total, lat: bodyLat, lng: bodyLng } = req.body;
+    const {
+      userId, type, quantity, priority, address, notes, total,
+      lat: bodyLat, lng: bodyLng, productId: rawProductId,
+    } = req.body;
+    const product = getServiceProduct(rawProductId || DEFAULT_PRODUCT_ID);
     const newId  = id();
     const newRef = 'ORD-' + newId.slice(-6);
     const { lat, lng } = await resolveCoords({ lat: bodyLat, lng: bodyLng, address });
 
     await pool.query(
-      `INSERT INTO orders (id, ref, userId, type, quantity, status, total, address, priority, notes, lat, lng, paymentStatus)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'unpaid')`,
-      [newId, newRef, userId, type, quantity || 1, 'Pending', total || 0, address || '', priority || 'normal', notes || '', lat, lng]
+      `INSERT INTO orders
+         (id, ref, userId, type, productId, productLabel, quantity, status, total, address, priority, notes, lat, lng, paymentStatus)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'unpaid')`,
+      [
+        newId, newRef, userId, type, product.id, product.label, quantity || 1,
+        'Pending', total || 0, address || '', priority || 'normal', notes || '', lat, lng,
+      ]
     );
 
     const [[user]] = await pool.query('SELECT fullName, email FROM users WHERE id = ?', [userId]);
@@ -1538,7 +1561,7 @@ app.post('/api/checkout', async (req, res) => {
       currency: 'PHP',
       amount: total,
       country: 'PH',
-      description: `AguaDoc — ${type} (${quantity} gal)`,
+      description: `AguaDoc — ${product.label} ×${quantity || 1}`,
       customer: {
         reference_id: `${userId}-${newId}`, // unique per order — Xendit rejects reusing a customer reference_id
         type: 'INDIVIDUAL',
@@ -1644,34 +1667,42 @@ const LITERS_PER_ORDER_GALLON = 19;
 
 /**
  * Deduct stock + tank water once when an order is fulfilled (Delivered / Ready to Go).
- * Default refill kit: slim refill + cap + seal. Empty containers are not deducted.
+ * Lines depend on productId (refill vs new jug, slim vs square).
  */
 async function consumeInventoryForOrder(order) {
   if (!order?.id) return null;
   const qty = Math.max(0, parseInt(order.quantity, 10) || 0);
   if (qty < 1) return null;
 
+  let productId = order.productId;
   try {
     const [[fresh]] = await pool.query(
-      'SELECT id, quantity, inventoryConsumedAt, ref FROM orders WHERE id = ? LIMIT 1',
+      'SELECT id, quantity, productId, inventoryConsumedAt, ref FROM orders WHERE id = ? LIMIT 1',
       [order.id]
     );
     if (!fresh || fresh.inventoryConsumedAt) return null;
+    productId = fresh.productId || productId;
   } catch (err) {
     if (err.code === 'ER_BAD_FIELD_ERROR') {
-      console.warn('inventoryConsumedAt missing — run migration 008_inventory_consume.sql');
+      // Older schema without productId / inventoryConsumedAt
+      try {
+        const [[fresh]] = await pool.query(
+          'SELECT id, quantity, inventoryConsumedAt, ref FROM orders WHERE id = ? LIMIT 1',
+          [order.id]
+        );
+        if (!fresh || fresh.inventoryConsumedAt) return null;
+      } catch (inner) {
+        console.warn('consumeInventoryForOrder check failed:', inner.message);
+        return null;
+      }
+    } else {
+      console.warn('consumeInventoryForOrder check failed:', err.message);
       return null;
     }
-    console.warn('consumeInventoryForOrder check failed:', err.message);
-    return null;
   }
 
   const liters = qty * LITERS_PER_ORDER_GALLON;
-  const deductions = [
-    { id: 'stk-ref-slim', qty },
-    { id: 'stk-caps', qty },
-    { id: 'stk-seals', qty },
-  ];
+  const deductions = stockDeductionsForOrder(productId || DEFAULT_PRODUCT_ID, qty);
 
   for (const d of deductions) {
     const [[item]] = await pool.query('SELECT * FROM stock_items WHERE id = ? LIMIT 1', [d.id]);

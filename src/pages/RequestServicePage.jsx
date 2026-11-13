@@ -9,8 +9,8 @@ import { TermsModal } from '../components/TermsContent';
 import GeoMap from '../components/map/GeoMap';
 import BrandMark from '../components/BrandMark';
 import { formatMoney } from '../lib/money';
+import { DEFAULT_PRODUCT_ID, SERVICE_PRODUCTS, getServiceProduct } from '../lib/products';
 
-const PRICE_PER_GALLON = 40;
 const DELIVERY_FEE = 20;
 const DEFAULT_CENTER = { lat: 10.3157, lng: 123.9740 };
 const GALLON_PRESETS = [1, 2, 3, 5, 10];
@@ -150,9 +150,52 @@ function SectionLabel({ children, required }) {
   );
 }
 
+function ProductPicker({ value, onChange }) {
+  return (
+    <div className="overflow-hidden rounded-[22px] border border-slate-200/80 bg-white shadow-sm">
+      <div className="border-b border-slate-100 px-4 py-3">
+        <SectionLabel required>Item &amp; container type</SectionLabel>
+        <p className="mt-[-0.35rem] text-xs text-muted">Choose refill or a new jug — this deducts the matching stock when fulfilled.</p>
+      </div>
+      <div className="divide-y divide-slate-100">
+        {SERVICE_PRODUCTS.map((p) => {
+          const selected = value === p.id;
+          return (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => onChange(p.id)}
+              className={`flex w-full items-center gap-3 px-4 py-3.5 text-left transition ${
+                selected ? 'bg-blue-50/80' : 'bg-white hover:bg-slate-50'
+              }`}
+            >
+              <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
+                selected ? 'border-blue-500 bg-blue-500 text-white' : 'border-slate-300'
+              }`}>
+                {selected ? <CheckCircle2 size={12} /> : null}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold text-ink">{p.label}</span>
+                <span className="mt-0.5 block text-[11px] text-muted">
+                  {p.kind === 'refill' ? 'Water refill only · bring your jug' : 'New container filled with water'}
+                </span>
+              </span>
+              <span className="shrink-0 text-sm font-bold tabular-nums text-blue-600">
+                {formatMoney(p.price)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function OrderSummaryPanel({
   orderType,
   quantity,
+  unitPrice,
+  productLabel,
   subtotal,
   deliveryFee,
   total,
@@ -171,8 +214,13 @@ function OrderSummaryPanel({
         </p>
       </div>
       <div className="space-y-3 px-5 py-4 text-sm">
+        {productLabel && (
+          <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-medium leading-snug text-slate-600">
+            {productLabel}
+          </p>
+        )}
         <div className="flex justify-between gap-3 text-muted">
-          <span>Gallons ({quantity} × {formatMoney(PRICE_PER_GALLON)})</span>
+          <span>Items ({quantity} × {formatMoney(unitPrice)})</span>
           <span className="font-semibold text-ink">{formatMoney(subtotal)}</span>
         </div>
         {isDelivery && (
@@ -207,6 +255,7 @@ function OrderSummaryPanel({
 export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }) {
   const [step, setStep] = useState(1);
   const [orderType, setOrderType] = useState('');
+  const [productId, setProductId] = useState(DEFAULT_PRODUCT_ID);
   const [quantity, setQuantity] = useState(1);
   const [address, setAddress] = useState(user?.address || '');
   const [notes, setNotes] = useState('');
@@ -224,7 +273,9 @@ export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }
 
   const isWalkin = orderType === 'walkin';
   const isDelivery = orderType === 'delivery';
-  const subtotal = quantity * PRICE_PER_GALLON;
+  const product = getServiceProduct(productId);
+  const unitPrice = product.price;
+  const subtotal = quantity * unitPrice;
   const deliveryFee = isDelivery ? DELIVERY_FEE : 0;
   const total = subtotal + deliveryFee;
   const hasSavedAddress = Boolean(user?.address?.trim());
@@ -324,7 +375,10 @@ export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }
 
   function goNext() {
     setError('');
-    if (step === 1 && !orderType) { setError('Please select an order type.'); return; }
+    if (step === 1) {
+      if (!orderType) { setError('Please select an order type.'); return; }
+      if (!productId) { setError('Please select an item & container type.'); return; }
+    }
     if (step === 2 && isDelivery) {
       if (!address.trim()) { setError('Please enter a delivery address.'); return; }
       if (pin.lat == null || pin.lng == null) { setError('Please set a delivery pin on the map.'); return; }
@@ -340,6 +394,7 @@ export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }
       await apiAddOrder({
         userId: user.id,
         type: 'Walk-in / Pickup',
+        productId: product.id,
         priority: 'normal',
         quantity,
         address: 'Walk-in',
@@ -365,6 +420,7 @@ export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }
       await apiAddOrder({
         userId: user.id,
         type: 'Delivery',
+        productId: product.id,
         priority: 'normal',
         quantity,
         address,
@@ -392,6 +448,7 @@ export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }
       const { checkoutUrl } = await apiCreateCheckout({
         userId: user.id,
         type: 'Delivery',
+        productId: product.id,
         priority: 'normal',
         quantity,
         address,
@@ -413,6 +470,7 @@ export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }
     setSuccessPay('');
     setStep(1);
     setOrderType('');
+    setProductId(DEFAULT_PRODUCT_ID);
     setQuantity(1);
     setAddress(user?.address || '');
     setNotes('');
@@ -425,6 +483,8 @@ export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }
   const summaryProps = {
     orderType,
     quantity,
+    unitPrice,
+    productLabel: product.label,
     subtotal,
     deliveryFee,
     total,
@@ -458,8 +518,12 @@ export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }
               <span className="text-muted">Payment</span>
               <span className="font-semibold text-ink">{successPay || '—'}</span>
             </div>
+            <div className="flex justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-3">
+              <span className="text-muted">Item</span>
+              <span className="max-w-[65%] text-right text-xs font-semibold text-ink">{product.label}</span>
+            </div>
             <div className="flex justify-between rounded-2xl bg-slate-50 px-4 py-3">
-              <span className="text-muted">Gallons</span>
+              <span className="text-muted">Quantity</span>
               <span className="font-semibold text-ink">{quantity}</span>
             </div>
             <div className="flex justify-between rounded-2xl bg-blue-50 px-4 py-3.5">
@@ -513,7 +577,7 @@ export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }
           <div className="flex flex-wrap gap-2 sm:flex-col sm:items-end">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3.5 py-2 text-xs font-semibold text-white ring-1 ring-white/15 backdrop-blur">
               <Sparkles size={13} className="text-sky-300" />
-              {formatMoney(PRICE_PER_GALLON)} / gallon
+              Refill from {formatMoney(25)}
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3.5 py-2 text-xs font-semibold text-white ring-1 ring-white/15 backdrop-blur">
               <Truck size={13} className="text-sky-300" />
@@ -560,6 +624,12 @@ export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }
                 </div>
               </div>
 
+              {orderType && (
+                <div className="agua-fade-up">
+                  <ProductPicker value={productId} onChange={(id) => { setProductId(id); setError(''); }} />
+                </div>
+              )}
+
               {error && (
                 <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-600 ring-1 ring-red-100">
                   {error}
@@ -570,7 +640,7 @@ export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }
                 <button
                   type="button"
                   onClick={goNext}
-                  disabled={!orderType}
+                  disabled={!orderType || !productId}
                   className="agua-btn agua-btn-primary disabled:opacity-40"
                 >
                   Continue <ArrowRight size={16} />
@@ -583,7 +653,7 @@ export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }
           {step === 2 && (
             <div key="step-2" className="agua-fade-up space-y-5">
               <div className="rounded-[22px] border border-slate-200/80 bg-gradient-to-br from-slate-50 to-white p-4 sm:p-5">
-                <SectionLabel required>How many gallons?</SectionLabel>
+                <SectionLabel required>How many?</SectionLabel>
                 <div className="mb-4 flex flex-wrap gap-2">
                   {GALLON_PRESETS.map((n) => (
                     <button
@@ -611,7 +681,7 @@ export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }
                     </button>
                     <div className="min-w-[4.5rem] text-center">
                       <p className="font-display text-3xl font-bold text-ink">{quantity}</p>
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">gallons</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">units</p>
                     </div>
                     <button
                       type="button"
@@ -778,7 +848,11 @@ export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }
                     </span>
                   </div>
                   <div className="flex justify-between gap-3">
-                    <span className="text-muted">Gallons</span>
+                    <span className="text-muted">Item</span>
+                    <span className="max-w-[65%] text-right text-xs font-medium text-ink">{product.label}</span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted">Quantity</span>
                     <span className="font-medium text-ink">{quantity}</span>
                   </div>
                   {notes.trim() && (

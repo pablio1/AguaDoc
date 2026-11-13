@@ -72,9 +72,11 @@ export default function OrdersPage() {
 
   function orderItemsText(o) {
     const qty = o.quantity ?? o.gallons ?? 1;
+    if (o.productLabel) return `${o.productLabel} × ${qty}`;
+    if (o.productId) return `${o.productId} × ${qty}`;
     const walk = isWalkinOrder(o);
-    if (walk) return `Gallon Refill x ${qty}`;
-    return `Water Delivery x ${qty} gal`;
+    if (walk) return `Gallon Refill × ${qty}`;
+    return `Water Delivery × ${qty}`;
   }
 
   function formatOrderDate(o) {
