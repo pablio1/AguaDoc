@@ -15,7 +15,7 @@ import FilterPills from '../components/admin/FilterPills';
 import { TABLE_BODY_ROW, TABLE_HEAD_ROW } from '../components/admin/tableStyles';
 import EmptyState from '../components/admin/EmptyState';
 import { Users, Send, MessageCircle } from 'lucide-react';
-import { formatMoney, sumMoney } from '../lib/money';
+import { formatMoney, roundMoney, sumMoney } from '../lib/money';
 
 const PRICE_PER_GALLON = 40; // walk-ins pick up in person — no delivery fee added
 
@@ -97,7 +97,7 @@ export default function CustomersPage() {
     setSaving(true);
     try {
       const orders  = Number(editForm.orders);
-      const balance = orders * PRICE_PER_GALLON;
+      const balance = roundMoney(orders * PRICE_PER_GALLON);
       const updated = await apiUpdateCustomer(editingCustomer.id, {
         fullName: editForm.name,
         email: editingCustomer.email || null,

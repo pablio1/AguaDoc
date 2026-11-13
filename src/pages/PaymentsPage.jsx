@@ -9,7 +9,7 @@ import SectionCard from '../components/admin/SectionCard';
 import { TABLE_BODY_ROW, TABLE_HEAD_ROW } from '../components/admin/tableStyles';
 import EmptyState from '../components/admin/EmptyState';
 import { CreditCard, Wallet } from 'lucide-react';
-import { formatMoney, sumMoney } from '../lib/money';
+import { formatMoney, roundMoney, sumMoney } from '../lib/money';
 
 export default function PaymentsPage() {
   const { state, dispatch } = useApp();
@@ -31,8 +31,8 @@ export default function PaymentsPage() {
 
   // ── Record payment — backend inserts payment AND reduces debt balance + credit gallons ──
   async function handleRecordPayment() {
-    const amount = Number(form.amount);
-    if (!form.custId || !Number.isFinite(amount) || amount <= 0) {
+    const amount = roundMoney(form.amount);
+    if (!form.custId || amount <= 0) {
       showToast('⚠ Select a customer and enter a valid amount.');
       return;
     }
@@ -213,7 +213,10 @@ export default function PaymentsPage() {
             <div>
               <label className="agua-label">Amount paid (₱)</label>
               <input
-                type="number" min="1" placeholder="0"
+                type="number"
+                min="0.01"
+                step="0.01"
+                placeholder="0.00"
                 className="agua-input"
                 value={form.amount}
                 onChange={e => setForm({ ...form, amount: e.target.value })}

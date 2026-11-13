@@ -202,6 +202,17 @@ async function customerHasAccount(customerId) {
 const DEBT_RISK_THRESHOLD = 300;     // matches the "High risk" cutoff used on the Predictions page
 const LOW_STOCK_THRESHOLD = 20;      // percent
 
+/** Round peso amounts to 2 decimal places (debt, payments, notifications). */
+function roundMoney(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+function formatPeso(value) {
+  return `₱${roundMoney(value).toFixed(2)}`;
+}
+
 // ── Unpaid-balance reminders (runs periodically, not tied to any single request) ──
 const REMINDER_COOLDOWN_HOURS = 24;  // don't re-remind the same customer more than once per day
 async function checkUnpaidBalances() {
@@ -218,17 +229,17 @@ async function checkUnpaidBalances() {
         await createNotification({
           audience: 'customer',
           userId: c.id,
-          message: `Reminder: you have an outstanding balance of ₱${c.balance}.`,
+          message: `Reminder: you have an outstanding balance of ${formatPeso(c.balance)}.`,
           type: 'Debt',
         });
       }
       await pool.query('UPDATE customers SET remindedAt = NOW() WHERE id = ?', [c.id]);
     }
 
-    const totalOwed = debtors.reduce((sum, c) => sum + parseFloat(c.balance), 0);
+    const totalOwed = debtors.reduce((sum, c) => sum + (parseFloat(c.balance) || 0), 0);
     await createNotification({
       audience: 'admin',
-      message: `${debtors.length} customer(s) have unpaid balances totaling ₱${totalOwed.toFixed(2)}.`,
+      message: `${debtors.length} customer(s) have unpaid balances totaling ${formatPeso(totalOwed)}.`,
       type: 'Debt',
     });
   } catch (err) {
@@ -536,7 +547,12 @@ app.get('/api/users', async (req, res) => {
 // ── CUSTOMERS ──
 app.get('/api/customers', async (req, res) => {
   const [rows] = await pool.query('SELECT * FROM customers ORDER BY createdAt DESC');
-  res.json(rows);
+  res.json(
+    rows.map((c) => ({
+      ...c,
+      balance: roundMoney(c.balance),
+    }))
+  );
 });
 
 // Update own profile (and optionally change password)
@@ -609,7 +625,7 @@ app.post('/api/customers', async (req, res) => {
     const newId = id();
     await pool.query(
       'INSERT INTO customers (id, fullName, email, phone, address, balance, orders) VALUES (?,?,?,?,?,?,0)',
-      [newId, fullName, email || null, phone, address, balance || 0]
+      [newId, fullName, email || null, phone, address, roundMoney(balance || 0)]
     );
     const [rows] = await pool.query('SELECT * FROM customers WHERE id = ?', [newId]);
     await createNotification({ audience: 'admin', message: `New walk-in customer added: ${fullName}.`, type: 'System' });
@@ -624,10 +640,11 @@ app.put('/api/customers/:id', async (req, res) => {
   try {
     const { fullName, email, phone, address, balance, orders, agreementSigned } = req.body;
     const [[before]] = await pool.query('SELECT balance FROM customers WHERE id = ?', [req.params.id]);
+    const newBalance = roundMoney(balance ?? 0);
 
     await pool.query(
       'UPDATE customers SET fullName=?, email=?, phone=?, address=?, balance=?, orders=? WHERE id=?',
-      [fullName, email || null, phone, address, balance, orders ?? 0, req.params.id]
+      [fullName, email || null, phone, address, newBalance, orders ?? 0, req.params.id]
     );
 
     // Only touch the signed-agreement date when the caller actually sent the flag — the Payments page
@@ -642,11 +659,10 @@ app.put('/api/customers/:id', async (req, res) => {
 
     // Only fire once, right when the customer crosses INTO high-risk territory — not on every save after that.
     const oldBalance = parseFloat(before?.balance ?? 0);
-    const newBalance = parseFloat(balance ?? 0);
     if (newBalance >= DEBT_RISK_THRESHOLD && oldBalance < DEBT_RISK_THRESHOLD) {
       await createNotification({
         audience: 'admin',
-        message: `${fullName} now owes ₱${newBalance} — flagged as high debt risk.`,
+        message: `${fullName} now owes ${formatPeso(newBalance)} — flagged as high debt risk.`,
         type: 'Debt',
       });
     }
@@ -1615,7 +1631,7 @@ async function settleOfflineOrderPayment(order) {
       paymentId,
       order.userId || null,
       order.id,
-      Number(order.total) || 0,
+      roundMoney(order.total),
       order.payMethod || 'Cash',
     ]
   );
@@ -1825,14 +1841,14 @@ const DEBT_PRICE_PER_GALLON = 40;
 /** Apply a cash/GCash collection against Debt Management balance + credit gallons. */
 async function applyPaymentToCustomerDebt(custId, amount) {
   if (!custId) return null;
-  const paid = Number(amount);
-  if (!Number.isFinite(paid) || paid <= 0) return null;
+  const paid = roundMoney(amount);
+  if (paid <= 0) return null;
 
   const [[cust]] = await pool.query('SELECT * FROM customers WHERE id = ? LIMIT 1', [custId]);
   if (!cust) return null;
 
-  const prevBalance = parseFloat(cust.balance) || 0;
-  const newBalance = Math.max(0, Math.round((prevBalance - paid) * 100) / 100);
+  const prevBalance = roundMoney(cust.balance);
+  const newBalance = roundMoney(Math.max(0, prevBalance - paid));
   // Keep gallons-on-credit in sync — Debt Management derives display balance from orders × ₱40
   const newOrders = Math.max(0, Math.floor((newBalance + 1e-9) / DEBT_PRICE_PER_GALLON));
 
@@ -1848,11 +1864,11 @@ async function applyPaymentToCustomerDebt(custId, amount) {
 app.post('/api/payments', async (req, res) => {
   try {
     const { custId, orderId, amount, method } = req.body;
-    const paid = Number(amount);
+    const paid = roundMoney(amount);
     if (!custId) {
       return res.status(400).json({ success: false, message: 'Customer is required.' });
     }
-    if (!Number.isFinite(paid) || paid <= 0) {
+    if (paid <= 0) {
       return res.status(400).json({ success: false, message: 'Enter a valid payment amount.' });
     }
 
@@ -1870,7 +1886,7 @@ app.post('/api/payments', async (req, res) => {
       await createNotification({
         audience: 'customer',
         userId: custId,
-        message: `Payment of ₱${paid.toFixed(2)} received via ${method || 'Cash'} — thank you!`,
+        message: `Payment of ${formatPeso(paid)} received via ${method || 'Cash'} — thank you!`,
         type: 'Payment',
       });
     }

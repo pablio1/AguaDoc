@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Info, Crosshair, LocateFixed, Store, Truck, CheckCircle2,
-  CreditCard, Banknote, ArrowRight, ArrowLeft, Minus, Plus, Droplets, Zap,
+  CreditCard, Banknote, ArrowRight, ArrowLeft, Minus, Plus,
   Sparkles, ShieldCheck, MapPin, Phone, Clock, Home,
 } from 'lucide-react';
 import { apiAddOrder, apiCreateCheckout, apiGeocode, apiReverseGeocode } from '../api';
@@ -141,30 +141,6 @@ function OrderTypeCard({ icon: Icon, title, subtitle, included, selected, onClic
   );
 }
 
-function PriorityBadge({ value, label, description, icon: Icon, selected, onClick }) {
-  return (
-    <button
-      type="button"
-      onClick={() => onClick(value)}
-      className={`flex flex-1 items-start gap-3 rounded-2xl border-2 px-4 py-3.5 text-left transition ${
-        selected
-          ? 'border-blue-500 bg-blue-50/80 text-ink shadow-sm shadow-blue-500/10'
-          : 'border-slate-200 bg-white text-muted hover:border-blue-300'
-      }`}
-    >
-      <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
-        selected ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-500'
-      }`}>
-        <Icon size={16} />
-      </span>
-      <span>
-        <span className="block text-sm font-bold text-ink">{label}</span>
-        <span className="mt-0.5 block text-xs leading-relaxed text-muted">{description}</span>
-      </span>
-    </button>
-  );
-}
-
 function SectionLabel({ children, required }) {
   return (
     <p className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">
@@ -177,7 +153,6 @@ function SectionLabel({ children, required }) {
 function OrderSummaryPanel({
   orderType,
   quantity,
-  priority,
   subtotal,
   deliveryFee,
   total,
@@ -212,11 +187,6 @@ function OrderSummaryPanel({
             <span className="font-semibold text-emerald-600">Free</span>
           </div>
         )}
-        {priority === 'priority' && (
-          <div className="flex items-center gap-1.5 rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 ring-1 ring-amber-100">
-            <Zap size={12} /> Priority handling requested
-          </div>
-        )}
         {isDelivery && address?.trim() && (
           <div className="rounded-xl bg-slate-50 px-3 py-2.5 text-xs text-muted">
             <p className="mb-1 flex items-center gap-1 font-semibold text-slate-500">
@@ -237,7 +207,6 @@ function OrderSummaryPanel({
 export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }) {
   const [step, setStep] = useState(1);
   const [orderType, setOrderType] = useState('');
-  const [priority, setPriority] = useState('normal');
   const [quantity, setQuantity] = useState(1);
   const [address, setAddress] = useState(user?.address || '');
   const [notes, setNotes] = useState('');
@@ -371,7 +340,7 @@ export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }
       await apiAddOrder({
         userId: user.id,
         type: 'Walk-in / Pickup',
-        priority,
+        priority: 'normal',
         quantity,
         address: 'Walk-in',
         notes,
@@ -396,7 +365,7 @@ export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }
       await apiAddOrder({
         userId: user.id,
         type: 'Delivery',
-        priority,
+        priority: 'normal',
         quantity,
         address,
         notes,
@@ -423,7 +392,7 @@ export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }
       const { checkoutUrl } = await apiCreateCheckout({
         userId: user.id,
         type: 'Delivery',
-        priority,
+        priority: 'normal',
         quantity,
         address,
         notes,
@@ -444,7 +413,6 @@ export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }
     setSuccessPay('');
     setStep(1);
     setOrderType('');
-    setPriority('normal');
     setQuantity(1);
     setAddress(user?.address || '');
     setNotes('');
@@ -457,7 +425,6 @@ export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }
   const summaryProps = {
     orderType,
     quantity,
-    priority,
     subtotal,
     deliveryFee,
     total,
@@ -592,30 +559,6 @@ export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }
                   />
                 </div>
               </div>
-
-              {orderType && (
-                <div className="agua-fade-up">
-                  <SectionLabel>Priority</SectionLabel>
-                  <div className="flex flex-col gap-3 sm:flex-row">
-                    <PriorityBadge
-                      value="normal"
-                      label="Normal"
-                      description="Standard queue · usually same-day in Lapu-Lapu"
-                      icon={Droplets}
-                      selected={priority === 'normal'}
-                      onClick={setPriority}
-                    />
-                    <PriorityBadge
-                      value="priority"
-                      label="Priority"
-                      description="Moved up in the queue when a rider is free"
-                      icon={Zap}
-                      selected={priority === 'priority'}
-                      onClick={setPriority}
-                    />
-                  </div>
-                </div>
-              )}
 
               {error && (
                 <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-600 ring-1 ring-red-100">
