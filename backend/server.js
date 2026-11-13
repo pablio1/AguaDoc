@@ -1134,6 +1134,46 @@ app.put('/api/rider/bookings/:id/decline', async (req, res) => {
   }
 });
 
+/** Mark delivered with POD fields when present; fall back if older schema. */
+async function markOrderDelivered(orderId, { podNote = null, cash = null, photo = null } = {}) {
+  const attempts = [
+    {
+      sql: `UPDATE orders
+            SET status = 'Delivered', tripLeg = 'deliver', deliveredAt = NOW(),
+                podNote = ?, podCashCollected = ?, podPhoto = ?
+            WHERE id = ?`,
+      params: [podNote, cash, photo, orderId],
+    },
+    {
+      sql: `UPDATE orders
+            SET status = 'Delivered', deliveredAt = NOW(),
+                podNote = ?, podCashCollected = ?, podPhoto = ?
+            WHERE id = ?`,
+      params: [podNote, cash, photo, orderId],
+    },
+    {
+      sql: `UPDATE orders SET status = 'Delivered', deliveredAt = NOW() WHERE id = ?`,
+      params: [orderId],
+    },
+    {
+      sql: `UPDATE orders SET status = 'Delivered' WHERE id = ?`,
+      params: [orderId],
+    },
+  ];
+
+  let lastErr = null;
+  for (const attempt of attempts) {
+    try {
+      await pool.query(attempt.sql, attempt.params);
+      return;
+    } catch (err) {
+      lastErr = err;
+      if (err.code !== 'ER_BAD_FIELD_ERROR') throw err;
+    }
+  }
+  throw lastErr || new Error('Could not mark order delivered');
+}
+
 app.put('/api/rider/bookings/:id/trip-leg', async (req, res) => {
   try {
     const { riderId, tripLeg } = req.body || {};
@@ -1228,26 +1268,28 @@ app.put('/api/rider/bookings/:id/status', async (req, res) => {
         photo = podPhoto;
       }
 
-      await pool.query(
-        `UPDATE orders
-         SET status = 'Delivered',
-             tripLeg = 'deliver',
-             deliveredAt = NOW(),
-             podNote = ?,
-             podCashCollected = ?,
-             podPhoto = ?
-         WHERE id = ?`,
-        [podNote || null, cash, photo, req.params.id]
-      );
+      await markOrderDelivered(req.params.id, {
+        podNote: podNote || null,
+        cash,
+        photo,
+      });
 
       await settleOfflineOrderPayment({ ...order, status });
       await consumeInventoryForOrder(order);
     } else if (status === 'Out for Delivery' && status !== previousStatus) {
       const leg = initialTripLeg(order.productId);
-      await pool.query(
-        'UPDATE orders SET status = ?, tripLeg = ? WHERE id = ?',
-        [status, leg, req.params.id]
-      );
+      try {
+        await pool.query(
+          'UPDATE orders SET status = ?, tripLeg = ? WHERE id = ?',
+          [status, leg, req.params.id]
+        );
+      } catch (err) {
+        if (err.code === 'ER_BAD_FIELD_ERROR') {
+          await pool.query('UPDATE orders SET status = ? WHERE id = ?', [status, req.params.id]);
+        } else {
+          throw err;
+        }
+      }
     } else {
       await pool.query('UPDATE orders SET status = ? WHERE id = ?', [status, req.params.id]);
     }

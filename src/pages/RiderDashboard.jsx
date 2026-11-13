@@ -230,28 +230,168 @@ function payLabel(order) {
   return { text: method, tone: 'other' };
 }
 
-function compressImageFile(file, maxSide = 960, quality = 0.72) {
+function compressDataUrl(dataUrl, maxSide = 960, quality = 0.72) {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('Could not read photo'));
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = () => reject(new Error('Invalid image'));
-      img.onload = () => {
-        const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
-        const w = Math.round(img.width * scale);
-        const h = Math.round(img.height * scale);
-        const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL('image/jpeg', quality));
-      };
-      img.src = reader.result;
+    const img = new Image();
+    img.onerror = () => reject(new Error('Invalid image'));
+    img.onload = () => {
+      const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', quality));
     };
-    reader.readAsDataURL(file);
+    img.src = dataUrl;
   });
+}
+
+/** Live rear camera capture for proof of delivery (no gallery picker). */
+function PodCameraCapture({ photo, onCapture, onClear }) {
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const [cameraError, setCameraError] = useState(null);
+  const [starting, setStarting] = useState(false);
+  const [live, setLive] = useState(false);
+
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setLive(false);
+  }, []);
+
+  const startCamera = useCallback(async () => {
+    setCameraError(null);
+    setStarting(true);
+    stopCamera();
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error('Camera is not supported on this device/browser.');
+      }
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        });
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+      }
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play().catch(() => {});
+      }
+      setLive(true);
+    } catch (err) {
+      setCameraError(err.message || 'Could not open camera. Allow camera permission and try again.');
+      setLive(false);
+    } finally {
+      setStarting(false);
+    }
+  }, [stopCamera]);
+
+  useEffect(() => {
+    if (!photo) startCamera();
+    return () => stopCamera();
+  }, [photo, startCamera, stopCamera]);
+
+  async function takePhoto() {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth) {
+      setCameraError('Camera is not ready yet.');
+      return;
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0);
+    try {
+      const raw = canvas.toDataURL('image/jpeg', 0.92);
+      const compressed = await compressDataUrl(raw);
+      stopCamera();
+      onCapture(compressed);
+    } catch (err) {
+      setCameraError(err.message || 'Could not capture photo');
+    }
+  }
+
+  return (
+    <div className="block">
+      <span className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+        <Camera size={13} /> Delivery photo (camera)
+      </span>
+
+      {photo ? (
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-900">
+          <img src={photo} alt="Proof of delivery" className="h-48 w-full object-cover" />
+          <div className="flex gap-2 bg-white p-2">
+            <button
+              type="button"
+              onClick={() => {
+                onClear();
+              }}
+              className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Retake with camera
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-950">
+          <div className="relative aspect-[4/3] bg-black">
+            <video
+              ref={videoRef}
+              playsInline
+              muted
+              autoPlay
+              className="h-full w-full object-cover"
+            />
+            {!live && !cameraError && (
+              <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80 text-xs font-medium text-white/80">
+                {starting ? 'Opening camera…' : 'Starting camera…'}
+              </div>
+            )}
+          </div>
+          {cameraError ? (
+            <div className="space-y-2 bg-white p-3">
+              <p className="text-xs font-medium text-rose-600">{cameraError}</p>
+              <button
+                type="button"
+                onClick={startCamera}
+                className="w-full rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white"
+              >
+                Retry camera
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center gap-3 bg-white px-3 py-3">
+              <button
+                type="button"
+                disabled={!live || starting}
+                onClick={takePhoto}
+                className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-5 py-2.5 text-xs font-bold text-white disabled:opacity-50"
+              >
+                <Camera size={16} />
+                Take photo
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function externalMapsUrl(order) {
@@ -1331,30 +1471,11 @@ export default function RiderDashboard({ user, onLogout }) {
                   placeholder="Gate code, left with guard, etc."
                 />
               </label>
-              <label className="block">
-                <span className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-600">
-                  <Camera size={13} /> Photo (optional)
-                </span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  className="block w-full text-xs text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) { setPodPhoto(null); return; }
-                    try {
-                      const dataUrl = await compressImageFile(file);
-                      setPodPhoto(dataUrl);
-                    } catch (err) {
-                      showToast(err.message || 'Could not process photo', 'err');
-                    }
-                  }}
-                />
-                {podPhoto && (
-                  <img src={podPhoto} alt="Proof preview" className="mt-2 h-28 w-full rounded-xl object-cover" />
-                )}
-              </label>
+              <PodCameraCapture
+                photo={podPhoto}
+                onCapture={setPodPhoto}
+                onClear={() => setPodPhoto(null)}
+              />
             </div>
             <div className="flex gap-2 border-t border-slate-100 px-4 py-3">
               <button
