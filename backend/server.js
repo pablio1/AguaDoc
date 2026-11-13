@@ -544,9 +544,181 @@ app.post('/api/users/:id/accept-terms', async (req, res) => {
 // Get all registered users (customers)
 app.get('/api/users', async (req, res) => {
   const [rows] = await pool.query(
-    'SELECT id, fullName, username, email, phone, address, role FROM users ORDER BY createdAt DESC'
+    'SELECT id, fullName, username, email, phone, address, role, createdAt FROM users ORDER BY createdAt DESC'
   );
   res.json(rows);
+});
+
+/** Alphanumeric password for rider accounts (no ambiguous 0/O/1/l). */
+function generateRiderPassword(length = 10) {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  let out = '';
+  for (let i = 0; i < length; i += 1) {
+    out += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+  return out;
+}
+
+function slugUsername(base) {
+  return String(base || 'rider')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '')
+    .slice(0, 16) || 'rider';
+}
+
+// Admin: list riders
+app.get('/api/riders', async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT id, fullName, username, email, phone, address, role, createdAt
+       FROM users WHERE role = 'rider'
+       ORDER BY createdAt DESC`
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Admin: create rider account + generated alphanumeric password
+app.post('/api/riders', async (req, res) => {
+  try {
+    const { fullName, username: rawUsername, phone, email: rawEmail, address } = req.body || {};
+    if (!fullName || !String(fullName).trim()) {
+      return res.status(400).json({ success: false, message: 'Full name is required.' });
+    }
+    if (!phone || !String(phone).trim()) {
+      return res.status(400).json({ success: false, message: 'Phone is required.' });
+    }
+
+    let username = String(rawUsername || '').trim().toLowerCase();
+    if (!username) {
+      const base = slugUsername(fullName.split(/\s+/)[0]);
+      username = base;
+      let n = 1;
+      while (true) {
+        const [[clash]] = await pool.query('SELECT id FROM users WHERE username = ? LIMIT 1', [username]);
+        if (!clash) break;
+        n += 1;
+        username = `${base}${n}`;
+      }
+    } else if (!/^[a-z0-9._-]{3,32}$/.test(username)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username must be 3–32 characters (letters, numbers, . _ -).',
+      });
+    }
+
+    const email = String(rawEmail || '').trim() || `${username}@aguadoc.rider`;
+    const password = generateRiderPassword(10);
+
+    const [existing] = await pool.query(
+      'SELECT id FROM users WHERE email = ? OR username = ?',
+      [email, username]
+    );
+    if (existing.length > 0) {
+      return res.status(400).json({ success: false, message: 'Username or email already exists.' });
+    }
+
+    const newId = id();
+    await pool.query(
+      `INSERT INTO users
+         (id, fullName, username, email, password, phone, address, gender, role, termsAcceptedAt, termsVersion)
+       VALUES (?,?,?,?,?,?,?,?, 'rider', NOW(), '1.0')`,
+      [
+        newId,
+        String(fullName).trim(),
+        username,
+        email,
+        password,
+        String(phone).trim(),
+        address ? String(address).trim() : null,
+        'Other',
+      ]
+    );
+
+    await createNotification({
+      audience: 'admin',
+      message: `Rider account created: ${fullName.trim()} (@${username}).`,
+      type: 'System',
+    });
+
+    const [[row]] = await pool.query(
+      'SELECT id, fullName, username, email, phone, address, role, createdAt FROM users WHERE id = ?',
+      [newId]
+    );
+    // Password returned once so admin can share it with the rider
+    res.json({ ...row, password });
+  } catch (err) {
+    console.error('Failed to create rider:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Admin: regenerate rider password
+app.post('/api/riders/:id/reset-password', async (req, res) => {
+  try {
+    const [[rider]] = await pool.query(
+      `SELECT id, fullName, username FROM users WHERE id = ? AND role = 'rider'`,
+      [req.params.id]
+    );
+    if (!rider) return res.status(404).json({ success: false, message: 'Rider not found' });
+
+    const password = generateRiderPassword(10);
+    await pool.query('UPDATE users SET password = ? WHERE id = ?', [password, rider.id]);
+
+    await createNotification({
+      audience: 'admin',
+      message: `Password reset for rider ${rider.fullName} (@${rider.username}).`,
+      type: 'System',
+    });
+
+    res.json({ success: true, id: rider.id, username: rider.username, password });
+  } catch (err) {
+    console.error('Failed to reset rider password:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Admin: update rider profile (not password — use reset-password)
+app.put('/api/riders/:id', async (req, res) => {
+  try {
+    const { fullName, phone, email, address } = req.body || {};
+    const [[rider]] = await pool.query(
+      `SELECT * FROM users WHERE id = ? AND role = 'rider'`,
+      [req.params.id]
+    );
+    if (!rider) return res.status(404).json({ success: false, message: 'Rider not found' });
+
+    const nextEmail = email != null && String(email).trim() ? String(email).trim() : rider.email;
+    if (nextEmail !== rider.email) {
+      const [[clash]] = await pool.query(
+        'SELECT id FROM users WHERE email = ? AND id <> ? LIMIT 1',
+        [nextEmail, rider.id]
+      );
+      if (clash) return res.status(400).json({ success: false, message: 'Email already in use.' });
+    }
+
+    await pool.query(
+      `UPDATE users SET fullName = ?, phone = ?, email = ?, address = ? WHERE id = ?`,
+      [
+        fullName != null ? String(fullName).trim() : rider.fullName,
+        phone != null ? String(phone).trim() : rider.phone,
+        nextEmail,
+        address != null ? String(address).trim() : rider.address,
+        rider.id,
+      ]
+    );
+
+    const [[row]] = await pool.query(
+      'SELECT id, fullName, username, email, phone, address, role, createdAt FROM users WHERE id = ?',
+      [rider.id]
+    );
+    res.json(row);
+  } catch (err) {
+    console.error('Failed to update rider:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 // ── CUSTOMERS ──

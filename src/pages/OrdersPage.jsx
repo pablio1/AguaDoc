@@ -797,7 +797,7 @@ export default function OrdersPage() {
           </select>
           {riders.length === 0 && (
             <p className="mb-3 text-xs text-amber-700">
-              No rider accounts found. Create a user with role <strong>rider</strong> first (seed: rider / rider123).
+              No rider accounts found. Add one under <strong>Rider Management</strong> in the sidebar.
             </p>
           )}
           <div className="mt-2 flex justify-end gap-2">

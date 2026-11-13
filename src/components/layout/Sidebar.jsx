@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Users, ClipboardList, Map, CreditCard,
-  Droplets, BarChart3, Bell, Sparkles, LogOut, MessageSquareText, X, Settings,
+  Droplets, BarChart3, Bell, Sparkles, LogOut, MessageSquareText, X, Settings, Bike,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import BrandMark from '../BrandMark';
@@ -12,6 +12,7 @@ const navItems = [
   { path: '/inventory', icon: Droplets, label: 'Inventory & Stocks' },
   { path: '/customers', icon: Users, label: 'Debt Management' },
   { path: '/orders', icon: ClipboardList, label: 'Orders & Dispatch' },
+  { path: '/riders', icon: Bike, label: 'Rider Management' },
   { path: '/delivery-route', icon: Map, label: 'Live Delivery Map' },
   { path: '/sms', icon: MessageSquareText, label: 'SMS Module' },
   { path: '/payments', icon: CreditCard, label: 'Payments & Billing' },

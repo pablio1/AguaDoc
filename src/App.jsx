@@ -19,6 +19,7 @@ import PredictionsPage from './pages/PredictionsPage';
 import DeliveryRoutePage from './pages/DeliveryRoutePage';
 import SmsPage from './pages/SmsPage';
 import SettingsPage from './pages/SettingsPage';
+import RidersPage from './pages/RidersPage';
 
 function App() {
   const [user, setUser] = useState(() => {
@@ -90,6 +91,7 @@ function App() {
             <Route path="/dashboard"     element={<DashboardPage />} />
             <Route path="/customers"     element={<CustomersPage />} />
             <Route path="/orders"        element={<OrdersPage />} />
+            <Route path="/riders"        element={<RidersPage />} />
             <Route path="/delivery-route" element={<DeliveryRoutePage />} />
             <Route path="/payments"      element={<PaymentsPage />} />
             <Route path="/inventory"     element={<InventoryPage />} />

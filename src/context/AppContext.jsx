@@ -66,6 +66,13 @@ function reducer(state, action) {
       return { ...state, notifications: state.notifications.map((n) => ({ ...n, read: 1 })) };
     case 'SET_USERS':
       return { ...state, users: action.payload };
+    case 'ADD_USER':
+      return { ...state, users: [action.payload, ...(state.users || [])] };
+    case 'UPDATE_USER':
+      return {
+        ...state,
+        users: (state.users || []).map((u) => (u.id === action.payload.id ? { ...u, ...action.payload } : u)),
+      };
     default:
       return state;
   }

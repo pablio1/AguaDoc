@@ -223,6 +223,43 @@ export async function apiGetUsers() {
   const res = await fetch(`/api/users`);
   return res.json();
 }
+
+// RIDERS (admin)
+export async function apiGetRiders() {
+  const res = await fetch(`${BASE}/riders`);
+  const result = await res.json();
+  if (!res.ok) throw new Error(result.message || 'Failed to load riders');
+  return result;
+}
+export async function apiCreateRider(data) {
+  const res = await fetch(`${BASE}/riders`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  const result = await res.json();
+  if (!res.ok) throw new Error(result.message || 'Failed to create rider');
+  return result;
+}
+export async function apiUpdateRider(id, data) {
+  const res = await fetch(`${BASE}/riders/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  const result = await res.json();
+  if (!res.ok) throw new Error(result.message || 'Failed to update rider');
+  return result;
+}
+export async function apiResetRiderPassword(id) {
+  const res = await fetch(`${BASE}/riders/${id}/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  const result = await res.json();
+  if (!res.ok) throw new Error(result.message || 'Failed to reset password');
+  return result;
+}
 export async function apiUpdateUser(id, data) {
   const res = await fetch(`/api/users/${id}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
