@@ -9,6 +9,7 @@ import LiveTrackScreen from '../components/customer/LiveTrackScreen';
 import {
   apiGetOrders, apiUpdateUser, apiAcceptTerms, apiGetNotifications,
   apiMarkNotificationRead, apiMarkAllNotificationsRead, apiGetRiderLocation, apiGetRiderRoute,
+  apiGetPayments,
 } from '../api';
 import RequestServicePage from './RequestServicePage';
 import { TermsModal, TermsGate, TERMS_VERSION } from '../components/TermsContent';
@@ -35,7 +36,7 @@ const STATUS_STYLE = {
   Cancelled:          'bg-red-50 text-red-600 ring-1 ring-red-100',
 };
 
-const COMPLETED_STATUSES = new Set(['Delivered', 'Cancelled']);
+const COMPLETED_STATUSES = new Set(['Delivered', 'Ready to Go', 'Cancelled']);
 
 function isWalkinOrder(order) {
   return order.type === 'Walk-in / Pickup' || order.type === 'Walk-in';
@@ -225,6 +226,8 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
   const [rider, setRider] = useState(null); // { lat, lng, updatedAt } | null
   const [trackRoute, setTrackRoute] = useState([]); // [lat,lng][]
   const [trackMeta, setTrackMeta] = useState({}); // { durationS, distanceM }
+  const [payments, setPayments] = useState([]);
+  const [paymentsLoading, setPaymentsLoading] = useState(false);
 
   // Edit Profile state
   const [profileForm, setProfileForm] = useState({
@@ -242,6 +245,23 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
       .then(data => { setOrders(Array.isArray(data) ? data : []); setLoading(false); })
       .catch(() => setLoading(false));
   }, [user.id]);
+
+  useEffect(() => {
+    if (active !== 'billing') return;
+    let cancelled = false;
+    setPaymentsLoading(true);
+    apiGetPayments(user.id)
+      .then((data) => {
+        if (!cancelled) setPayments(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setPayments([]);
+      })
+      .finally(() => {
+        if (!cancelled) setPaymentsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [active, user.id]);
 
   // Handle the return trip from Xendit's hosted checkout page.
   useEffect(() => {
@@ -872,12 +892,68 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
             <div className="space-y-4">
               <div>
                 <h2 className="font-display text-2xl font-bold tracking-tight text-ink">Billing history</h2>
-                <p className="mt-1 text-sm text-muted">Past payments and invoices will appear here.</p>
+                <p className="mt-1 text-sm text-muted">
+                  Payments for walk-in, cash on delivery, and online checkout.
+                </p>
               </div>
-              <div className="agua-card p-10 text-center">
-                <CreditCard size={28} className="mx-auto mb-3 text-slate-300" />
-                <p className="text-sm text-muted">No billing records yet.</p>
-              </div>
+
+              {paymentsLoading ? (
+                <div className="agua-card space-y-3 p-5">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-14 animate-pulse rounded-xl bg-slate-100" />
+                  ))}
+                </div>
+              ) : payments.length === 0 ? (
+                <div className="agua-card p-10 text-center">
+                  <CreditCard size={28} className="mx-auto mb-3 text-slate-300" />
+                  <p className="text-sm font-semibold text-ink">No payments yet</p>
+                  <p className="mt-1 text-xs text-muted">
+                    Walk-in payments appear after the station marks your order Ready to Go.
+                  </p>
+                </div>
+              ) : (
+                <div className="agua-card overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[520px] text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-100 bg-slate-50/80 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                          <th className="px-5 py-3">Date</th>
+                          <th className="px-5 py-3">Order</th>
+                          <th className="px-5 py-3">Method</th>
+                          <th className="px-5 py-3 text-right">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {payments.map((p) => (
+                          <tr key={p.id} className="border-b border-slate-50 last:border-0">
+                            <td className="px-5 py-3.5 text-muted">
+                              {p.date
+                                ? new Date(p.date).toLocaleDateString('en-PH', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    year: 'numeric',
+                                  })
+                                : '—'}
+                            </td>
+                            <td className="px-5 py-3.5">
+                              <p className="font-mono text-xs font-bold text-ink">
+                                {p.orderRef || p.orderId || '—'}
+                              </p>
+                              {p.orderType && (
+                                <p className="mt-0.5 text-[11px] text-muted">{p.orderType}</p>
+                              )}
+                            </td>
+                            <td className="px-5 py-3.5 text-muted">{p.method || '—'}</td>
+                            <td className="px-5 py-3.5 text-right font-display font-bold text-blue-600">
+                              {formatMoney(p.amount)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

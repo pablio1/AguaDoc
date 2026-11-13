@@ -795,6 +795,12 @@ app.put('/api/rider/bookings/:id/status', async (req, res) => {
     const previousStatus = order.status;
     await pool.query('UPDATE orders SET status = ? WHERE id = ?', [status, req.params.id]);
 
+    // COD payment + inventory consume when rider marks delivered
+    if (status === 'Delivered' && status !== previousStatus) {
+      await settleOfflineOrderPayment({ ...order, status });
+      await consumeInventoryForOrder(order);
+    }
+
     if (order.userId && status !== previousStatus) {
       await createNotification({
         audience: 'customer',
@@ -1260,15 +1266,197 @@ app.post('/api/webhooks/xendit', async (req, res) => {
   }
 });
 
+function isOfflinePayMethod(method) {
+  const m = String(method || '').toLowerCase();
+  return (
+    m.includes('cash') ||
+    m.includes('arrival') ||
+    m.includes('cod') ||
+    m.includes('pay on') ||
+    m.includes('walk-in')
+  );
+}
+
+/** Record cash/COD payment when an offline order is completed at the station or by the rider. */
+async function settleOfflineOrderPayment(order) {
+  if (!order?.id) return null;
+  if (String(order.paymentStatus || '').toLowerCase() === 'paid') return null;
+  if (!isOfflinePayMethod(order.payMethod)) return null;
+
+  const [[existing]] = await pool.query(
+    'SELECT id FROM payments WHERE orderId = ? LIMIT 1',
+    [order.id]
+  );
+  if (existing) {
+    await pool.query("UPDATE orders SET paymentStatus = 'paid' WHERE id = ?", [order.id]);
+    return existing;
+  }
+
+  const paymentId = id();
+  await pool.query(
+    'INSERT INTO payments (id, custId, orderId, amount, method) VALUES (?,?,?,?,?)',
+    [
+      paymentId,
+      order.userId || null,
+      order.id,
+      Number(order.total) || 0,
+      order.payMethod || 'Cash',
+    ]
+  );
+  await pool.query("UPDATE orders SET paymentStatus = 'paid' WHERE id = ?", [order.id]);
+  return { id: paymentId };
+}
+
+/** Liters drawn from the station tank per ordered gallon jug (~5-gal refill). */
+const LITERS_PER_ORDER_GALLON = 19;
+
+/**
+ * Deduct stock + tank water once when an order is fulfilled (Delivered / Ready to Go).
+ * Default refill kit: slim refill + cap + seal. Empty containers are not deducted.
+ */
+async function consumeInventoryForOrder(order) {
+  if (!order?.id) return null;
+  const qty = Math.max(0, parseInt(order.quantity, 10) || 0);
+  if (qty < 1) return null;
+
+  try {
+    const [[fresh]] = await pool.query(
+      'SELECT id, quantity, inventoryConsumedAt, ref FROM orders WHERE id = ? LIMIT 1',
+      [order.id]
+    );
+    if (!fresh || fresh.inventoryConsumedAt) return null;
+  } catch (err) {
+    if (err.code === 'ER_BAD_FIELD_ERROR') {
+      console.warn('inventoryConsumedAt missing — run migration 008_inventory_consume.sql');
+      return null;
+    }
+    console.warn('consumeInventoryForOrder check failed:', err.message);
+    return null;
+  }
+
+  const liters = qty * LITERS_PER_ORDER_GALLON;
+  const deductions = [
+    { id: 'stk-ref-slim', qty },
+    { id: 'stk-caps', qty },
+    { id: 'stk-seals', qty },
+  ];
+
+  for (const d of deductions) {
+    const [[item]] = await pool.query('SELECT * FROM stock_items WHERE id = ? LIMIT 1', [d.id]);
+    if (!item) continue;
+    const beforeStock = Number(item.stock) || 0;
+    const afterStock = Math.max(0, beforeStock - d.qty);
+    await pool.query('UPDATE stock_items SET stock = ? WHERE id = ?', [afterStock, d.id]);
+
+    const logId = `cl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    try {
+      await pool.query(
+        `INSERT INTO restock_logs
+           (id, stockItemId, itemName, category, quantityAdded, stockBefore, stockAfter, performedBy, note)
+         VALUES (?,?,?,?,?,?,?,?,?)`,
+        [
+          logId,
+          item.id,
+          item.name,
+          item.category,
+          -d.qty,
+          beforeStock,
+          afterStock,
+          'System',
+          `Consumed by order ${order.ref || order.id}`,
+        ]
+      );
+    } catch (logErr) {
+      console.warn('Stock consume log failed:', logErr.message);
+    }
+
+    if (afterStock <= Number(item.minAlert) && beforeStock > Number(item.minAlert)) {
+      await createNotification({
+        audience: 'admin',
+        message: `Low stock after order ${order.ref || order.id}: ${item.name} is at ${afterStock} (min ${item.minAlert}).`,
+        type: 'Inventory',
+      });
+    }
+  }
+
+  const [[tank]] = await pool.query(
+    'SELECT waterLevel, maxCapacity, readyGallons, totalGallons FROM inventory WHERE id = 1'
+  );
+  if (tank) {
+    const prevLevel = parseFloat(tank.waterLevel) || 0;
+    const maxCap = parseFloat(tank.maxCapacity) || 10000;
+    const nextLevel = Math.max(0, Math.round((prevLevel - liters) * 100) / 100);
+    const nextReady = Math.max(0, (parseInt(tank.readyGallons, 10) || 0) - qty);
+    const nextTotal = (parseInt(tank.totalGallons, 10) || 0) + qty;
+
+    await pool.query(
+      'UPDATE inventory SET waterLevel = ?, readyGallons = ?, totalGallons = ? WHERE id = 1',
+      [nextLevel, nextReady, nextTotal]
+    );
+
+    const oldPct = maxCap > 0 ? (prevLevel / maxCap) * 100 : 100;
+    const newPct = maxCap > 0 ? (nextLevel / maxCap) * 100 : 0;
+    if (newPct < LOW_STOCK_THRESHOLD && oldPct >= LOW_STOCK_THRESHOLD) {
+      await createNotification({
+        audience: 'admin',
+        message: `Water supply low: ${Math.round(newPct)}% remaining after order ${order.ref || order.id}.`,
+        type: 'Inventory',
+      });
+    }
+  }
+
+  try {
+    await pool.query('UPDATE orders SET inventoryConsumedAt = NOW() WHERE id = ?', [order.id]);
+  } catch (err) {
+    if (err.code !== 'ER_BAD_FIELD_ERROR') {
+      console.warn('Failed to mark inventoryConsumedAt:', err.message);
+    }
+  }
+
+  return { qty, liters };
+}
+
+/** Fix older walk-in/COD orders that were completed before payment rows were written. */
+async function backfillOfflinePayments({ userId } = {}) {
+  const params = [];
+  let sql = `
+    SELECT * FROM orders
+    WHERE status IN ('Ready to Go', 'Delivered')
+      AND (paymentStatus IS NULL OR paymentStatus = '' OR LOWER(paymentStatus) != 'paid')
+  `;
+  if (userId) {
+    sql += ' AND userId = ?';
+    params.push(userId);
+  }
+  const [rows] = await pool.query(sql, params);
+  for (const order of rows) {
+    if (isOfflinePayMethod(order.payMethod)) {
+      await settleOfflineOrderPayment(order);
+    }
+  }
+}
+
 app.put('/api/orders/:id', async (req, res) => {
   try {
     const { status, type, quantity } = req.body;
-    const [[before]] = await pool.query('SELECT ref, userId, status FROM orders WHERE id = ?', [req.params.id]);
+    const [[before]] = await pool.query('SELECT * FROM orders WHERE id = ?', [req.params.id]);
 
     await pool.query(
       'UPDATE orders SET status=?, type=?, quantity=? WHERE id=?',
       [status, type, quantity, req.params.id]
     );
+
+    // Walk-in / COD: cash + stock/tank deduction when the order is completed
+    if (
+      before &&
+      status &&
+      status !== before.status &&
+      (status === 'Ready to Go' || status === 'Delivered')
+    ) {
+      await settleOfflineOrderPayment({ ...before, status });
+      await consumeInventoryForOrder(before);
+    }
+
     const [rows] = await pool.query('SELECT * FROM orders WHERE id = ?', [req.params.id]);
 
     if (before && status && status !== before.status) {
@@ -1289,30 +1477,89 @@ app.put('/api/orders/:id', async (req, res) => {
 
 // ── PAYMENTS ──
 app.get('/api/payments', async (req, res) => {
-  const [rows] = await pool.query('SELECT * FROM payments ORDER BY date DESC');
-  res.json(rows);
+  try {
+    const { userId } = req.query;
+    await backfillOfflinePayments(userId ? { userId } : {});
+    if (userId) {
+      const [rows] = await pool.query(
+        `SELECT p.*, o.ref AS orderRef, o.type AS orderType, o.status AS orderStatus
+         FROM payments p
+         LEFT JOIN orders o ON o.id = p.orderId
+         WHERE p.custId = ?
+         ORDER BY p.date DESC`,
+        [userId]
+      );
+      return res.json(rows);
+    }
+    const [rows] = await pool.query(
+      `SELECT p.*, o.ref AS orderRef
+       FROM payments p
+       LEFT JOIN orders o ON o.id = p.orderId
+       ORDER BY p.date DESC`
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('Failed to load payments:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
+
+const DEBT_PRICE_PER_GALLON = 40;
+
+/** Apply a cash/GCash collection against Debt Management balance + credit gallons. */
+async function applyPaymentToCustomerDebt(custId, amount) {
+  if (!custId) return null;
+  const paid = Number(amount);
+  if (!Number.isFinite(paid) || paid <= 0) return null;
+
+  const [[cust]] = await pool.query('SELECT * FROM customers WHERE id = ? LIMIT 1', [custId]);
+  if (!cust) return null;
+
+  const prevBalance = parseFloat(cust.balance) || 0;
+  const newBalance = Math.max(0, Math.round((prevBalance - paid) * 100) / 100);
+  // Keep gallons-on-credit in sync — Debt Management derives display balance from orders × ₱40
+  const newOrders = Math.max(0, Math.floor((newBalance + 1e-9) / DEBT_PRICE_PER_GALLON));
+
+  await pool.query(
+    'UPDATE customers SET balance = ?, orders = ? WHERE id = ?',
+    [newBalance, newOrders, custId]
+  );
+
+  const [[updated]] = await pool.query('SELECT * FROM customers WHERE id = ?', [custId]);
+  return updated;
+}
 
 app.post('/api/payments', async (req, res) => {
   try {
     const { custId, orderId, amount, method } = req.body;
+    const paid = Number(amount);
+    if (!custId) {
+      return res.status(400).json({ success: false, message: 'Customer is required.' });
+    }
+    if (!Number.isFinite(paid) || paid <= 0) {
+      return res.status(400).json({ success: false, message: 'Enter a valid payment amount.' });
+    }
+
     const newId = id();
     await pool.query(
       'INSERT INTO payments (id, custId, orderId, amount, method) VALUES (?,?,?,?,?)',
-      [newId, custId, orderId, amount, method]
+      [newId, custId, orderId || null, paid, method || 'Cash']
     );
-    const [rows] = await pool.query('SELECT * FROM payments WHERE id = ?', [newId]);
+    const [[payment]] = await pool.query('SELECT * FROM payments WHERE id = ?', [newId]);
+
+    // Always reduce debt on the server so Debt Management cannot stay stale
+    const customer = await applyPaymentToCustomerDebt(custId, paid);
 
     if (await customerHasAccount(custId)) {
       await createNotification({
         audience: 'customer',
         userId: custId,
-        message: `Payment of ₱${amount} received via ${method} — thank you!`,
+        message: `Payment of ₱${paid.toFixed(2)} received via ${method || 'Cash'} — thank you!`,
         type: 'Payment',
       });
     }
 
-    res.json(rows[0]);
+    res.json({ ...payment, customer });
   } catch (err) {
     console.error('Failed to record payment:', err.message);
     res.status(500).json({ success: false, message: err.message });
@@ -1583,6 +1830,29 @@ async function fetchPendingDeliveryRecipients() {
   });
 }
 
+function extractSemaphoreError(data, status) {
+  if (data == null) return `Semaphore request failed (${status})`;
+  if (typeof data === 'string' && data.trim()) return data.trim();
+  if (Array.isArray(data)) {
+    const first = data[0];
+    return first?.message || first?.error || first?.detail || JSON.stringify(first);
+  }
+  if (typeof data === 'object') {
+    if (data.message) return String(data.message);
+    if (data.error) return String(data.error);
+    if (data.errors) {
+      if (typeof data.errors === 'string') return data.errors;
+      if (Array.isArray(data.errors)) return data.errors.map((e) => e?.message || e).join('; ');
+      if (typeof data.errors === 'object') {
+        return Object.entries(data.errors)
+          .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+          .join('; ');
+      }
+    }
+  }
+  return `Semaphore request failed (${status})`;
+}
+
 async function sendSemaphoreSms({ number, message }) {
   const apikey = await getSetting('semaphore_api_key');
   if (!apikey) {
@@ -1603,14 +1873,21 @@ async function sendSemaphoreSms({ number, message }) {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
   });
-  const data = await resp.json().catch(() => null);
+  const rawText = await resp.text();
+  let data = null;
+  try { data = rawText ? JSON.parse(rawText) : null; } catch { data = rawText; }
+
   if (!resp.ok) {
-    const msg =
-      (Array.isArray(data) && data[0]?.message) ||
-      data?.message ||
-      `Semaphore request failed (${resp.status})`;
+    let msg = extractSemaphoreError(data, resp.status);
+    // Common Semaphore failure when account has no approved sender name
+    if (resp.status >= 500 && !senderName) {
+      msg += ' — Often caused by no approved Sender Name. Apply for one in Semaphore, then set it in Integrations.';
+    } else if (resp.status >= 500 && senderName) {
+      msg += ' — Check Semaphore credits, that the sender name is Approved, and the API key is correct.';
+    }
     const err = new Error(msg);
     err.details = data;
+    err.status = resp.status;
     throw err;
   }
   return data;

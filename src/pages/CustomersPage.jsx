@@ -389,8 +389,8 @@ export default function CustomersPage() {
                 placeholder="0"
               />
               <p className="mt-1.5 text-[11px] text-muted">
-                = {formatMoney((Number(editForm.orders) || 0) * PRICE_PER_GALLON)} balance ({formatMoney(PRICE_PER_GALLON)}/gallon, no delivery fee for walk-ins).
-                Recording an actual payment on the Payments page reduces this automatically instead.
+                = {formatMoney((Number(editForm.orders) || 0) * PRICE_PER_GALLON)} balance ({formatMoney(PRICE_PER_GALLON)}/gallon).
+                Payments & Billing reduces both this gallon count and the balance when you record a collection.
               </p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">

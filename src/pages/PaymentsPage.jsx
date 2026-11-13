@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import Modal from '../components/ui/Modal';
 import { showToast } from '../components/ui/Toast';
-import { apiAddPayment, apiUpdateCustomer } from '../api';
+import { apiAddPayment } from '../api';
 import PageHeader from '../components/admin/PageHeader';
 import SectionCard from '../components/admin/SectionCard';
 import { TABLE_BODY_ROW, TABLE_HEAD_ROW } from '../components/admin/tableStyles';
@@ -29,14 +29,13 @@ export default function PaymentsPage() {
   // ── Payment history newest first ──
   const paymentHistory = [...state.payments].reverse();
 
-  // ── Record payment (replaces recordPayment) — now persists, and actually reduces the customer's balance. ──
+  // ── Record payment — backend inserts payment AND reduces debt balance + credit gallons ──
   async function handleRecordPayment() {
-    if (!form.custId || !form.amount || parseInt(form.amount) <= 0) {
+    const amount = Number(form.amount);
+    if (!form.custId || !Number.isFinite(amount) || amount <= 0) {
       showToast('⚠ Select a customer and enter a valid amount.');
       return;
     }
-    const customer = state.customers.find(c => String(c.id) === String(form.custId));
-    const amount   = parseInt(form.amount);
 
     try {
       const savedPayment = await apiAddPayment({
@@ -45,22 +44,18 @@ export default function PaymentsPage() {
         amount,
         method: form.method,
       });
-      dispatch({ type: 'ADD_PAYMENT', payload: savedPayment });
+      const { customer: updatedCustomer, ...paymentRow } = savedPayment || {};
+      dispatch({ type: 'ADD_PAYMENT', payload: paymentRow });
 
-      // Apply the payment against the customer's outstanding balance (never below 0).
-      if (customer) {
-        const newBalance = Math.max(0, (parseFloat(customer.balance) || 0) - amount);
-        const updatedCustomer = await apiUpdateCustomer(customer.id, { ...customer, balance: newBalance });
+      if (updatedCustomer?.id) {
         dispatch({ type: 'UPDATE_CUSTOMER', payload: updatedCustomer });
       }
 
-      // A "Payment received" notification is created automatically on the backend
-      // (only reaches the customer's own dashboard if this customer has a linked account).
-      showToast(`✅ Payment of ${formatMoney(amount)} recorded!`);
+      showToast(`✅ Payment of ${formatMoney(amount)} recorded — debt updated.`);
       setForm({ custId: '', method: 'Cash', amount: '' });
       setShowModal(false);
-    } catch {
-      showToast('❌ Failed to save payment.');
+    } catch (err) {
+      showToast(`❌ ${err.message || 'Failed to save payment.'}`);
     }
   }
 

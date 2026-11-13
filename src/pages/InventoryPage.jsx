@@ -52,6 +52,7 @@ export default function InventoryPage() {
   const [tankForm, setTankForm] = useState({
     waterLevel: inventory.waterLevel,
     maxCapacity: inventory.maxCapacity,
+    readyGallons: inventory.readyGallons,
   });
 
   const lowCount = useMemo(
@@ -62,6 +63,15 @@ export default function InventoryPage() {
   const waterPct = inventory.maxCapacity > 0
     ? Math.round((Number(inventory.waterLevel) / Number(inventory.maxCapacity)) * 100)
     : 0;
+
+  const refillStock = useMemo(
+    () => stockItems.filter((i) => i.category === 'Water Refill'),
+    [stockItems]
+  );
+  const refillUnits = useMemo(
+    () => refillStock.reduce((sum, i) => sum + (Number(i.stock) || 0), 0),
+    [refillStock]
+  );
 
   async function handleRestock() {
     if (!restockItem) return;
@@ -99,7 +109,7 @@ export default function InventoryPage() {
         ...inventory,
         waterLevel: parseFloat(tankForm.waterLevel) || 0,
         maxCapacity: parseFloat(tankForm.maxCapacity) || inventory.maxCapacity,
-        readyGallons: inventory.readyGallons,
+        readyGallons: parseInt(tankForm.readyGallons, 10) || 0,
         totalGallons: inventory.totalGallons,
       });
       dispatch({ type: 'SET_INVENTORY', payload: updated });
@@ -124,7 +134,7 @@ export default function InventoryPage() {
         title="Inventory & Stocks"
         subtitle={
           <>
-            Monitor gallon supplies, caps, seals, and equipment restock history.
+            Stock decreases automatically when orders are marked Ready to Go or Delivered.
             {lowCount > 0 && (
               <span className="ml-2 inline-flex items-center gap-1 font-semibold text-amber-600">
                 <AlertTriangle size={13} /> {lowCount} low
@@ -143,6 +153,31 @@ export default function InventoryPage() {
         </button>
       </PageHeader>
 
+      {/* Station snapshot */}
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="agua-card px-5 py-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">Tank water</p>
+          <p className="mt-2 font-display text-2xl font-bold text-blue-600">
+            {Number(inventory.waterLevel).toLocaleString()} L
+          </p>
+          <p className="mt-1 text-xs text-muted">{waterPct}% of {Number(inventory.maxCapacity).toLocaleString()} L</p>
+        </div>
+        <div className="agua-card px-5 py-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">Ready gallons</p>
+          <p className="mt-2 font-display text-2xl font-bold text-ink">
+            {Number(inventory.readyGallons || 0).toLocaleString()}
+          </p>
+          <p className="mt-1 text-xs text-muted">Filled jugs ready for pickup / delivery</p>
+        </div>
+        <div className="agua-card px-5 py-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">Refill stock</p>
+          <p className="mt-2 font-display text-2xl font-bold text-emerald-600">
+            {refillUnits.toLocaleString()}
+          </p>
+          <p className="mt-1 text-xs text-muted">Units across water refill SKUs</p>
+        </div>
+      </div>
+
       {/* Summary cards — clean white cards, category / name / qty / icon */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {stockItems.length === 0 ? (
@@ -157,16 +192,22 @@ export default function InventoryPage() {
           stockItems.map((item) => {
             const meta = CATEGORY_META[item.category] || CATEGORY_META.Containers;
             const Icon = meta.icon;
-            const low = Number(item.stock) <= Number(item.minAlert);
+            const stock = Number(item.stock) || 0;
+            const minAlert = Number(item.minAlert) || 0;
+            const low = stock <= minAlert;
+            const barMax = Math.max(minAlert * 3, stock, 1);
+            const barPct = Math.min(100, Math.round((stock / barMax) * 100));
             return (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => openRestock(item)}
-                className="group rounded-2xl border border-slate-200/80 bg-white p-4 text-left shadow-[0_8px_24px_rgba(15,42,74,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(15,42,74,0.08)]"
+                className={`group rounded-2xl border p-4 text-left shadow-[0_8px_24px_rgba(15,42,74,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(15,42,74,0.08)] ${
+                  low ? 'border-amber-200 bg-amber-50/40' : 'border-slate-200/80 bg-white'
+                }`}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-slate-400">
                       {item.category}
                     </p>
@@ -174,13 +215,23 @@ export default function InventoryPage() {
                       {item.name}
                     </p>
                     <p className="mt-3 text-[26px] font-bold leading-none tracking-tight text-ink">
-                      {Number(item.stock).toLocaleString()}
+                      {stock.toLocaleString()}
                       <span className="ml-1.5 text-xs font-medium text-slate-400">{item.unit || 'units'}</span>
                     </p>
-                    {low && (
+                    <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          low ? 'bg-amber-500' : 'bg-gradient-to-r from-blue-400 to-blue-600'
+                        }`}
+                        style={{ width: `${barPct}%` }}
+                      />
+                    </div>
+                    {low ? (
                       <p className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600">
-                        <AlertTriangle size={11} /> Below min ({item.minAlert})
+                        <AlertTriangle size={11} /> Below min ({minAlert})
                       </p>
+                    ) : (
+                      <p className="mt-2 text-[11px] text-slate-400">Min alert {minAlert}</p>
                     )}
                   </div>
                   <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${meta.iconBg}`}>
@@ -252,8 +303,8 @@ export default function InventoryPage() {
       </SectionCard>
 
       <SectionCard
-        title="Restock history & logs"
-        description="Audit trail of stock additions — who restocked what, and by how much"
+        title="Stock movement log"
+        description="Restocks (+) and automatic order consumption (−) when deliveries are completed"
         action={
           <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-500">
             {restockLogs.length} entries
@@ -267,7 +318,7 @@ export default function InventoryPage() {
                 <th className="px-5 py-3">Date</th>
                 <th className="px-3 py-3">Item Name</th>
                 <th className="px-3 py-3">Category</th>
-                <th className="px-3 py-3">Qty Added</th>
+                <th className="px-3 py-3">Qty</th>
                 <th className="px-3 py-3">Stock Change</th>
                 <th className="px-3 py-3">Performed By</th>
                 <th className="px-5 py-3">Note</th>
@@ -279,75 +330,99 @@ export default function InventoryPage() {
                   <td colSpan={7}>
                     <EmptyState
                       icon={ClipboardList}
-                      title="No restock activity yet"
-                      description="Use Restock on any item to start the log."
+                      title="No stock activity yet"
+                      description="Restock items, or complete an order to see consumption."
                     />
                   </td>
                 </tr>
               ) : (
-                restockLogs.map((log) => (
-                  <tr key={log.id} className={TABLE_BODY_ROW}>
-                    <td className="whitespace-nowrap px-5 py-3.5 text-slate-600">
-                      {formatDateTime(log.createdAt)}
-                    </td>
-                    <td className="px-3 py-3.5 font-semibold text-ink">{log.itemName}</td>
-                    <td className="px-3 py-3.5 text-slate-500">{log.category || '—'}</td>
-                    <td className="px-3 py-3.5">
-                      <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 text-[12px] font-semibold text-emerald-700">
-                        +{Number(log.quantityAdded).toLocaleString()}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3.5 text-slate-600">
-                      {Number(log.stockBefore).toLocaleString()}
-                      <span className="mx-1 text-slate-300">→</span>
-                      <span className="font-semibold text-ink">{Number(log.stockAfter).toLocaleString()}</span>
-                    </td>
-                    <td className="px-3 py-3.5 font-medium text-ink">{log.performedBy || 'Admin'}</td>
-                    <td className="max-w-[220px] truncate px-5 py-3.5 text-slate-500">
-                      {log.note || '—'}
-                    </td>
-                  </tr>
-                ))
+                restockLogs.map((log) => {
+                  const qty = Number(log.quantityAdded) || 0;
+                  const consumed = qty < 0;
+                  return (
+                    <tr key={log.id} className={TABLE_BODY_ROW}>
+                      <td className="whitespace-nowrap px-5 py-3.5 text-slate-600">
+                        {formatDateTime(log.createdAt)}
+                      </td>
+                      <td className="px-3 py-3.5 font-semibold text-ink">{log.itemName}</td>
+                      <td className="px-3 py-3.5 text-slate-500">{log.category || '—'}</td>
+                      <td className="px-3 py-3.5">
+                        <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[12px] font-semibold ${
+                          consumed
+                            ? 'bg-rose-50 text-rose-700'
+                            : 'bg-emerald-50 text-emerald-700'
+                        }`}>
+                          {consumed ? qty.toLocaleString() : `+${qty.toLocaleString()}`}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3.5 text-slate-600">
+                        {Number(log.stockBefore).toLocaleString()}
+                        <span className="mx-1 text-slate-300">→</span>
+                        <span className="font-semibold text-ink">{Number(log.stockAfter).toLocaleString()}</span>
+                      </td>
+                      <td className="px-3 py-3.5 font-medium text-ink">{log.performedBy || 'Admin'}</td>
+                      <td className="max-w-[220px] truncate px-5 py-3.5 text-slate-500">
+                        {log.note || '—'}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
       </SectionCard>
 
-      <div className="agua-card flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-bold text-ink">Station water tank</p>
-              <p className="text-xs text-muted">Bulk supply level used for refills</p>
+      <div className="agua-card overflow-hidden p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold text-ink">Station water tank</p>
+                <p className="text-xs text-muted">
+                  Auto-decreases ~19 L per fulfilled gallon · Ready jugs also drop on complete
+                </p>
+              </div>
+              <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+                waterPct < 20 ? 'bg-red-100 text-red-700' : waterPct < 50 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+              }`}>
+                {waterPct}%
+              </span>
             </div>
-            <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
-              waterPct < 20 ? 'bg-red-100 text-red-700' : waterPct < 50 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
-            }`}>
-              {waterPct}%
-            </span>
+            <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-100">
+              <div
+                className={`h-full rounded-full transition-all ${
+                  waterPct < 20 ? 'bg-red-500' : waterPct < 50 ? 'bg-amber-400' : 'bg-gradient-to-r from-blue-400 to-blue-600'
+                }`}
+                style={{ width: `${Math.min(100, Math.max(0, waterPct))}%` }}
+              />
+            </div>
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+              <span>
+                Tank {Number(inventory.waterLevel).toLocaleString()} / {Number(inventory.maxCapacity).toLocaleString()} L
+              </span>
+              <span>
+                Ready {Number(inventory.readyGallons || 0).toLocaleString()} gal
+              </span>
+              <span>
+                Lifetime filled {Number(inventory.totalGallons || 0).toLocaleString()} gal
+              </span>
+            </div>
           </div>
-          <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-100">
-            <div
-              className={`h-full rounded-full transition-all ${
-                waterPct < 20 ? 'bg-red-500' : waterPct < 50 ? 'bg-amber-400' : 'bg-gradient-to-r from-blue-400 to-blue-600'
-              }`}
-              style={{ width: `${Math.min(100, Math.max(0, waterPct))}%` }}
-            />
-          </div>
-          <p className="mt-2 text-xs text-muted">
-            {Number(inventory.waterLevel).toLocaleString()} / {Number(inventory.maxCapacity).toLocaleString()} L
-          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setTankForm({
+                waterLevel: inventory.waterLevel,
+                maxCapacity: inventory.maxCapacity,
+                readyGallons: inventory.readyGallons,
+              });
+              setShowTankModal(true);
+            }}
+            className="shrink-0 rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-ink hover:bg-slate-50"
+          >
+            Adjust tank
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setTankForm({ waterLevel: inventory.waterLevel, maxCapacity: inventory.maxCapacity });
-            setShowTankModal(true);
-          }}
-          className="shrink-0 rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-ink hover:bg-slate-50"
-        >
-          Adjust tank
-        </button>
       </div>
 
       {/* Restock modal */}
@@ -423,6 +498,9 @@ export default function InventoryPage() {
       {/* Tank modal */}
       {showTankModal && (
         <Modal title="Adjust Water Tank" onClose={() => setShowTankModal(false)}>
+          <p className="mb-4 text-xs text-muted">
+            Use this for manual corrections (refill from source). Order completion already deducts tank water and ready gallons automatically.
+          </p>
           <div className="mb-3">
             <label className="agua-label">Current level (L)</label>
             <input
@@ -433,13 +511,23 @@ export default function InventoryPage() {
               className="agua-input"
             />
           </div>
-          <div className="mb-4">
+          <div className="mb-3">
             <label className="agua-label">Max capacity (L)</label>
             <input
               type="number"
               min="1"
               value={tankForm.maxCapacity}
               onChange={(e) => setTankForm({ ...tankForm, maxCapacity: e.target.value })}
+              className="agua-input"
+            />
+          </div>
+          <div className="mb-4">
+            <label className="agua-label">Ready gallons (filled jugs)</label>
+            <input
+              type="number"
+              min="0"
+              value={tankForm.readyGallons}
+              onChange={(e) => setTankForm({ ...tankForm, readyGallons: e.target.value })}
               className="agua-input"
             />
           </div>

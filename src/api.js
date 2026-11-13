@@ -120,8 +120,9 @@ export async function apiGetRiderRoute(fromLat, fromLng, toLat, toLng) {
 }
 
 // PAYMENTS
-export async function apiGetPayments() {
-  const res = await fetch(`${BASE}/payments`);
+export async function apiGetPayments(userId) {
+  const url = userId ? `${BASE}/payments?userId=${encodeURIComponent(userId)}` : `${BASE}/payments`;
+  const res = await fetch(url);
   return res.json();
 }
 export async function apiAddPayment(data) {
@@ -129,7 +130,9 @@ export async function apiAddPayment(data) {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   });
-  return res.json();
+  const result = await res.json();
+  if (!res.ok) throw new Error(result.message || 'Failed to record payment');
+  return result;
 }
 
 // INVENTORY
