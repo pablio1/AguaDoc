@@ -25,6 +25,8 @@ const FIELD_HELP = {
     'From Xendit Dashboard → Settings → Webhooks → Verification token. Confirms paid orders.',
   backend_public_url:
     'Public HTTPS URL of this backend (ngrok or production). Used for checkout return + webhooks.',
+  frontend_url:
+    'Public URL of the customer site (production). After GCash, customers are sent back here — not localhost.',
   semaphore_api_key: 'From Semaphore Dashboard → API. Used for delivery and blast SMS.',
   semaphore_sender_name: 'Approved Semaphore sender name customers will see (optional).',
   geoapify_api_key:
@@ -35,6 +37,7 @@ const ICONS = {
   xendit_secret_key: KeyRound,
   xendit_webhook_token: Shield,
   backend_public_url: Link2,
+  frontend_url: Link2,
   semaphore_api_key: MessageSquareText,
   semaphore_sender_name: Wifi,
   geoapify_api_key: MapIcon,

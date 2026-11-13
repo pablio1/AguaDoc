@@ -100,13 +100,40 @@ export async function apiGetRiderBookings(riderId) {
   const res = await fetch(`${BASE}/rider/bookings?riderId=${encodeURIComponent(riderId)}`);
   return res.json();
 }
-export async function apiUpdateRiderBookingStatus(orderId, riderId, status) {
+export async function apiUpdateRiderBookingStatus(orderId, riderId, status, pod = {}) {
   const res = await fetch(`${BASE}/rider/bookings/${orderId}/status`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ riderId, status }),
+    body: JSON.stringify({ riderId, status, ...pod }),
   });
   const result = await res.json();
   if (!res.ok) throw new Error(result.message || 'Could not update status');
+  return result;
+}
+export async function apiClaimRiderBooking(orderId, riderId) {
+  const res = await fetch(`${BASE}/rider/bookings/${orderId}/claim`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ riderId }),
+  });
+  const result = await res.json();
+  if (!res.ok) throw new Error(result.message || 'Could not claim job');
+  return result;
+}
+export async function apiDeclineRiderBooking(orderId, riderId, reason = '') {
+  const res = await fetch(`${BASE}/rider/bookings/${orderId}/decline`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ riderId, reason }),
+  });
+  const result = await res.json();
+  if (!res.ok) throw new Error(result.message || 'Could not decline job');
+  return result;
+}
+export async function apiSendRouteToDriver(riderId, orderIds) {
+  const res = await fetch(`${BASE}/delivery-route/send`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ riderId, orderIds }),
+  });
+  const result = await res.json();
+  if (!res.ok) throw new Error(result.message || 'Could not send route');
   return result;
 }
 export async function apiGetRiderRoute(fromLat, fromLng, toLat, toLng) {
@@ -203,14 +230,18 @@ export async function apiUpdateUser(id, data) {
   });
   return res.json();
 }
-export async function apiGetRiderLocation() {
-  const res = await fetch(`${BASE}/rider-location`);
+export async function apiGetRiderLocation({ riderId, orderId } = {}) {
+  const qs = new URLSearchParams();
+  if (riderId) qs.set('riderId', riderId);
+  if (orderId) qs.set('orderId', orderId);
+  const suffix = qs.toString() ? `?${qs}` : '';
+  const res = await fetch(`${BASE}/rider-location${suffix}`);
   return res.json();
 }
-export async function apiPostRiderLocation(lat, lng) {
+export async function apiPostRiderLocation(lat, lng, riderId) {
   const res = await fetch(`${BASE}/rider-location`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ lat, lng })
+    body: JSON.stringify({ lat, lng, riderId })
   });
   return res.json();
 }
@@ -232,8 +263,9 @@ export async function apiReverseGeocode(lat, lng) {
   return res.json();
 }
 export async function apiGetNotifications(audience, userId) {
-  const qs = audience === 'customer' ? `?audience=customer&userId=${userId}` : `?audience=admin`;
-  const res = await fetch(`${BASE}/notifications${qs}`);
+  const qs = new URLSearchParams({ audience });
+  if (userId && (audience === 'customer' || audience === 'rider')) qs.set('userId', userId);
+  const res = await fetch(`${BASE}/notifications?${qs}`);
   return res.json();
 }
 export async function apiMarkNotificationRead(id) {

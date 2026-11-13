@@ -1,15 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bike, Package, MapPin, Navigation, CheckCircle2, LogOut,
-  RefreshCw, Phone, Clock, ChevronRight, Radio, ArrowUp,
+  RefreshCw, Phone, ChevronRight, Radio, ArrowUp,
   CornerUpLeft, CornerUpRight, Undo2, RotateCw, GitFork,
-  X, LocateFixed, Search,
+  X, LocateFixed, Search, Bell, Camera, Banknote, ExternalLink,
+  Handshake, Ban,
 } from 'lucide-react';
 import {
   apiGetRiderBookings,
   apiUpdateRiderBookingStatus,
+  apiClaimRiderBooking,
+  apiDeclineRiderBooking,
   apiPostRiderLocation,
   apiGetRiderRoute,
+  apiGetNotifications,
+  apiMarkNotificationRead,
+  apiMarkAllNotificationsRead,
 } from '../api';
 import GeoMap from '../components/map/GeoMap';
 import { formatMoney } from '../lib/money';
@@ -97,22 +103,126 @@ function ManeuverGlyph({ step, size = 26 }) {
   return <ArrowUp {...props} />;
 }
 
-function bannerCopy(steps) {
-  const usable = (steps || []).filter((s) => s.type !== 'depart' || s.name);
-  const current = usable[0] || steps?.[0];
-  const next = usable[1] || steps?.[1];
+function distanceAlongLine(gps, line) {
+  if (!gps || !line?.length) return 0;
+  let best = Infinity;
+  let along = 0;
+  let acc = 0;
+  for (let i = 0; i < line.length; i += 1) {
+    const pt = { lat: line[i][0], lng: line[i][1] };
+    if (i > 0) {
+      acc += distanceM(
+        { lat: line[i - 1][0], lng: line[i - 1][1] },
+        pt
+      );
+    }
+    const d = distanceM(gps, pt);
+    if (d < best) {
+      best = d;
+      along = acc;
+    }
+  }
+  return along;
+}
+
+function navProgress(gps, geometryLngLat, steps) {
+  const line = (geometryLngLat || []).map(([lng, lat]) => [lat, lng]);
+  const list = Array.isArray(steps) ? steps : [];
+  if (!list.length) {
+    return { stepIndex: 0, distToManeuverM: null, current: null, next: null };
+  }
+
+  const along = gps ? distanceAlongLine(gps, line) : 0;
+  let stepIndex = 0;
+  let cum = 0;
+  for (let i = 0; i < list.length; i += 1) {
+    const end = cum + Number(list[i].distanceM || 0);
+    if (along + 25 >= end && i < list.length - 1) {
+      stepIndex = i + 1;
+      cum = end;
+      continue;
+    }
+    stepIndex = i;
+    break;
+  }
+
+  // Snap forward if GPS is already past a maneuver pin
+  if (gps) {
+    for (let i = 0; i < list.length - 1; i += 1) {
+      const loc = list[i].location;
+      if (!loc?.lat) continue;
+      if (distanceM(gps, loc) < 28) stepIndex = Math.max(stepIndex, i + 1);
+    }
+  }
+
+  const current = list[stepIndex] || list[0];
+  const next = list[stepIndex + 1] || null;
+  const stepStart = list.slice(0, stepIndex).reduce((s, st) => s + Number(st.distanceM || 0), 0);
+  let distToManeuverM = Math.max(0, Number(current?.distanceM || 0) - Math.max(0, along - stepStart));
+  if (next?.location?.lat && gps) {
+    distToManeuverM = distanceM(gps, next.location);
+  } else if (current?.location?.lat && gps && current.type === 'arrive') {
+    distToManeuverM = distanceM(gps, current.location);
+  }
+  return { stepIndex, distToManeuverM, current, next };
+}
+
+function bannerCopy(progress) {
+  const current = progress?.current;
+  const next = progress?.next;
   if (!current) {
     return { title: 'Follow the route', subtitle: 'Toward drop-off' };
   }
   if (current.type === 'arrive') {
     return { title: 'Arrive at drop-off', subtitle: current.name || 'Customer location' };
   }
+  const dist = progress?.distToManeuverM != null
+    ? formatKm(progress.distToManeuverM)
+    : null;
   const title = current.ref || current.name || 'Continue';
   const toward = next?.name || next?.ref;
   return {
-    title,
+    title: dist ? `${dist} · ${title}` : title,
     subtitle: toward ? `toward ${toward}` : (current.name && current.ref ? current.name : 'Continue on route'),
   };
+}
+
+function payLabel(order) {
+  const method = String(order?.payMethod || '').trim();
+  const paid = String(order?.paymentStatus || '').toLowerCase() === 'paid';
+  if (paid) return { text: 'Paid online', tone: 'paid' };
+  if (!method) return { text: 'Collect on delivery', tone: 'cod' };
+  if (/cash|cod|arrival|walk/i.test(method)) return { text: method, tone: 'cod' };
+  return { text: method, tone: 'other' };
+}
+
+function compressImageFile(file, maxSide = 960, quality = 0.72) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read photo'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Invalid image'));
+      img.onload = () => {
+        const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function externalMapsUrl(order) {
+  if (order?.lat == null || order?.lng == null) return null;
+  return `https://www.google.com/maps/dir/?api=1&destination=${Number(order.lat)},${Number(order.lng)}&travelmode=driving`;
 }
 
 function routeLabel(route, index, fastestIdx, shortestIdx) {
@@ -134,6 +244,9 @@ export default function RiderDashboard({ user, onLogout }) {
   const [tab, setTab] = useState('active');
   const [mine, setMine] = useState([]);
   const [done, setDone] = useState([]);
+  const [available, setAvailable] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifs, setShowNotifs] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
   const [toast, setToast] = useState(null);
@@ -149,11 +262,17 @@ export default function RiderDashboard({ user, onLogout }) {
   const [navOpen, setNavOpen] = useState(false);
   const [follow, setFollow] = useState(true);
   const [pickingRoute, setPickingRoute] = useState(false);
+  const [podOrder, setPodOrder] = useState(null);
+  const [podNote, setPodNote] = useState('');
+  const [podCash, setPodCash] = useState('');
+  const [podPhoto, setPodPhoto] = useState(null);
+  const [podBusy, setPodBusy] = useState(false);
   const watchRef = useRef(null);
   const lastGpsRef = useRef(null);
   const lastFetchRef = useRef({ t: 0, lat: null, lng: null, destKey: null, ok: false });
   const selectedDurationRef = useRef(null);
   const routeRequestRef = useRef(0);
+  const knownNotifIds = useRef(new Set());
 
   const showToast = (text, type = 'ok') => {
     setToast({ text, type });
@@ -165,6 +284,7 @@ export default function RiderDashboard({ user, onLogout }) {
       const data = await apiGetRiderBookings(user.id);
       setMine(Array.isArray(data.mine) ? data.mine : []);
       setDone(Array.isArray(data.done) ? data.done : []);
+      setAvailable(Array.isArray(data.available) ? data.available : []);
     } catch {
       showToast('Could not load bookings', 'err');
     } finally {
@@ -172,11 +292,28 @@ export default function RiderDashboard({ user, onLogout }) {
     }
   }, [user.id]);
 
+  const loadNotifs = useCallback(async () => {
+    try {
+      const rows = await apiGetNotifications('rider', user.id);
+      const list = Array.isArray(rows) ? rows : [];
+      setNotifications(list);
+      const fresh = list.filter((n) => !n.read && !knownNotifIds.current.has(n.id));
+      if (fresh.length && knownNotifIds.current.size > 0) {
+        showToast(fresh[0].message);
+      }
+      list.forEach((n) => knownNotifIds.current.add(n.id));
+    } catch {
+      /* ignore */
+    }
+  }, [user.id]);
+
   useEffect(() => {
     load();
+    loadNotifs();
     const t = setInterval(load, 12000);
-    return () => clearInterval(t);
-  }, [load]);
+    const n = setInterval(loadNotifs, 10000);
+    return () => { clearInterval(t); clearInterval(n); };
+  }, [load, loadNotifs]);
 
   const activeOrder = useMemo(
     () => mine.find((o) => o.id === activeId) || mine.find((o) => o.status === 'Out for Delivery') || mine[0] || null,
@@ -211,7 +348,7 @@ export default function RiderDashboard({ user, onLogout }) {
         }
         lastGpsRef.current = next;
         setGps(next);
-        apiPostRiderLocation(next.lat, next.lng).catch(() => {});
+        apiPostRiderLocation(next.lat, next.lng, user.id).catch(() => {});
       },
       (err) => {
         setGpsError(err.message || 'GPS permission denied');
@@ -219,7 +356,7 @@ export default function RiderDashboard({ user, onLogout }) {
       },
       { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 }
     );
-  }, []);
+  }, [user.id]);
 
   const stopGps = useCallback(() => {
     if (watchRef.current != null) {
@@ -350,7 +487,40 @@ export default function RiderDashboard({ user, onLogout }) {
     setRouteTick((n) => n + 1);
   }
 
+  function openPod(order) {
+    const pay = payLabel(order);
+    setPodOrder(order);
+    setPodNote('');
+    setPodCash(pay.tone === 'cod' ? String(order.total ?? '') : '');
+    setPodPhoto(null);
+  }
+
+  async function submitPod() {
+    if (!podOrder) return;
+    setPodBusy(true);
+    try {
+      await apiUpdateRiderBookingStatus(podOrder.id, user.id, 'Delivered', {
+        podNote: podNote.trim() || undefined,
+        podCashCollected: podCash !== '' ? Number(podCash) : undefined,
+        podPhoto: podPhoto || undefined,
+      });
+      setPodOrder(null);
+      setNavOpen(false);
+      setPickingRoute(false);
+      showToast(`${podOrder.ref} delivered`);
+      await load();
+    } catch (e) {
+      showToast(e.message, 'err');
+    } finally {
+      setPodBusy(false);
+    }
+  }
+
   async function setStatus(order, status) {
+    if (status === 'Delivered') {
+      openPod(order);
+      return;
+    }
     setBusyId(order.id);
     try {
       const updated = await apiUpdateRiderBookingStatus(order.id, user.id, status);
@@ -373,11 +543,35 @@ export default function RiderDashboard({ user, onLogout }) {
         setPickingRoute(false);
         if (updated?.sms?.ok) showToast(`Delivery started · customer notified by SMS`);
       }
-      if (status === 'Delivered') {
-        setNavOpen(false);
-        setPickingRoute(false);
-        showToast(`${order.ref} delivered`);
-      }
+      await load();
+    } catch (e) {
+      showToast(e.message, 'err');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function claimJob(order) {
+    setBusyId(order.id);
+    try {
+      await apiClaimRiderBooking(order.id, user.id);
+      showToast(`${order.ref} claimed`);
+      setTab('active');
+      setActiveId(order.id);
+      await load();
+    } catch (e) {
+      showToast(e.message, 'err');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function declineJob(order) {
+    if (!confirm(`Decline ${order.ref}? It goes back to unassigned.`)) return;
+    setBusyId(order.id);
+    try {
+      await apiDeclineRiderBooking(order.id, user.id);
+      showToast(`${order.ref} declined`);
       await load();
     } catch (e) {
       showToast(e.message, 'err');
@@ -401,7 +595,8 @@ export default function RiderDashboard({ user, onLogout }) {
     setFollow(true);
   }
 
-  const list = tab === 'active' ? mine : done;
+  const list = tab === 'open' ? available : tab === 'active' ? mine : done;
+  const unreadNotifs = notifications.filter((n) => !n.read).length;
   const mapCenter = gps ? [gps.lat, gps.lng] : activeOrder?.lat ? [activeOrder.lat, activeOrder.lng] : DEPOT;
   const fitPoints = [
     gps ? [gps.lat, gps.lng] : null,
@@ -414,7 +609,8 @@ export default function RiderDashboard({ user, onLogout }) {
     ? headingFromLine(gps, routeLine)
     : (gps?.heading ?? 0);
   const navigating = navOpen && Boolean(activeOrder);
-  const banner = bannerCopy(currentRoute?.steps);
+  const progress = navProgress(gps, currentRoute?.geometry, currentRoute?.steps);
+  const banner = bannerCopy(progress);
 
   const fastestIdx = routes.reduce((best, r, i, arr) => (
     (r.durationS || Infinity) < (arr[best]?.durationS || Infinity) ? i : best
@@ -516,6 +712,19 @@ export default function RiderDashboard({ user, onLogout }) {
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
+                onClick={() => { setShowNotifs((v) => !v); }}
+                className="relative rounded-xl p-2 text-white/70 transition hover:bg-white/10 hover:text-white"
+                aria-label="Notifications"
+              >
+                <Bell size={16} />
+                {unreadNotifs > 0 && (
+                  <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white">
+                    {unreadNotifs}
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
                 onClick={load}
                 className="rounded-xl p-2 text-white/70 transition hover:bg-white/10 hover:text-white"
                 aria-label="Refresh"
@@ -557,7 +766,7 @@ export default function RiderDashboard({ user, onLogout }) {
           <div className="absolute top-0 inset-x-0 z-[1000] px-3 pt-3">
             <div className="mx-auto flex max-w-xl items-center gap-3 rounded-2xl bg-[#188038] px-4 py-3 text-white shadow-[0_10px_28px_rgba(24,128,56,0.35)]">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/15">
-                <ManeuverGlyph step={currentRoute?.steps?.[0]} />
+                <ManeuverGlyph step={progress.current || progress.next} />
               </div>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[17px] font-bold leading-tight tracking-tight">{banner.title}</p>
@@ -711,7 +920,8 @@ export default function RiderDashboard({ user, onLogout }) {
 
             <div className="flex gap-1 px-3 pt-3">
               {[
-                { id: 'active', label: 'Assigned to me', count: mine.length, icon: Navigation },
+                { id: 'active', label: 'Mine', count: mine.length, icon: Navigation },
+                { id: 'open', label: 'Open', count: available.length, icon: Handshake },
                 { id: 'history', label: 'Done', count: done.length, icon: CheckCircle2 },
               ].map(({ id, label, count, icon: Icon }) => (
                 <button
@@ -739,7 +949,8 @@ export default function RiderDashboard({ user, onLogout }) {
                 <div className="py-10 text-center">
                   <MapPin className="mx-auto mb-2 text-white/25" size={28} />
                   <p className="text-sm text-white/45">
-                    {tab === 'active' && 'No deliveries assigned yet — wait for admin'}
+                    {tab === 'active' && 'No deliveries assigned yet — wait for admin or claim Open jobs'}
+                    {tab === 'open' && 'No open jobs right now'}
                     {tab === 'history' && 'No completed deliveries yet'}
                   </p>
                 </div>
@@ -747,6 +958,8 @@ export default function RiderDashboard({ user, onLogout }) {
 
               {list.map((order) => {
                 const selected = activeOrder?.id === order.id;
+                const pay = payLabel(order);
+                const mapsUrl = externalMapsUrl(order);
                 return (
                   <article
                     key={order.id}
@@ -765,7 +978,7 @@ export default function RiderDashboard({ user, onLogout }) {
                         <Package size={18} className="text-cyan-300" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <p className="truncate font-semibold tracking-tight">{order.ref}</p>
                           <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_PILL[order.status] || STATUS_PILL.Pending}`}>
                             {order.status}
@@ -775,6 +988,15 @@ export default function RiderDashboard({ user, onLogout }) {
                               Priority
                             </span>
                           )}
+                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                            pay.tone === 'paid'
+                              ? 'bg-emerald-500/20 text-emerald-100 ring-1 ring-emerald-400/30'
+                              : pay.tone === 'cod'
+                                ? 'bg-amber-500/20 text-amber-100 ring-1 ring-amber-400/30'
+                                : 'bg-white/10 text-white/70'
+                          }`}>
+                            {pay.text}
+                          </span>
                         </div>
                         <p className="mt-0.5 truncate text-xs text-white/55">
                           {order.customerName || 'Customer'} · {order.quantity} gal · {formatMoney(order.total)}
@@ -783,6 +1005,11 @@ export default function RiderDashboard({ user, onLogout }) {
                           <MapPin size={12} className="mt-0.5 shrink-0" />
                           <span className="line-clamp-2">{order.address || 'No address'}</span>
                         </p>
+                        {order.notes && (
+                          <p className="mt-1 line-clamp-2 text-[11px] text-cyan-100/70">
+                            Note: {order.notes}
+                          </p>
+                        )}
                       </div>
                       <ChevronRight size={16} className="mt-1 shrink-0 text-white/25" />
                     </button>
@@ -797,6 +1024,18 @@ export default function RiderDashboard({ user, onLogout }) {
                         </a>
                       )}
 
+                      {tab === 'open' && (
+                        <button
+                          type="button"
+                          disabled={busyId === order.id}
+                          onClick={() => claimJob(order)}
+                          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-500 to-indigo-600 px-3 py-2 text-xs font-bold text-white shadow-md disabled:opacity-60"
+                        >
+                          <Handshake size={14} />
+                          Claim job
+                        </button>
+                      )}
+
                       {tab === 'active' && order.status === 'Assigned' && (
                         <button
                           type="button"
@@ -806,6 +1045,17 @@ export default function RiderDashboard({ user, onLogout }) {
                         >
                           <CheckCircle2 size={14} />
                           Accept delivery
+                        </button>
+                      )}
+
+                      {tab === 'active' && ['Assigned', 'Accepted'].includes(order.status) && (
+                        <button
+                          type="button"
+                          disabled={busyId === order.id}
+                          onClick={() => declineJob(order)}
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-white/10 px-3 py-2 text-xs font-semibold text-rose-200 transition hover:bg-rose-500/20"
+                        >
+                          <Ban size={13} /> Decline
                         </button>
                       )}
 
@@ -834,19 +1084,157 @@ export default function RiderDashboard({ user, onLogout }) {
                         </button>
                       )}
 
-                      {order.lat != null && order.lng != null && (
+                      {order.lat != null && order.lng != null && tab !== 'open' && (
                         <button
                           type="button"
                           onClick={() => openNavigation(order)}
                           className="inline-flex items-center gap-1.5 rounded-xl bg-white/10 px-3 py-2 text-xs font-semibold text-white/80 transition hover:bg-white/15"
                         >
-                          <Clock size={13} /> Navigate
+                          <Navigation size={13} /> Navigate
                         </button>
+                      )}
+                      {mapsUrl && (
+                        <a
+                          href={mapsUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-white/10 px-3 py-2 text-xs font-semibold text-white/80 transition hover:bg-white/15"
+                        >
+                          <ExternalLink size={13} /> Maps
+                        </a>
                       )}
                     </div>
                   </article>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showNotifs && !navigating && (
+        <div className="absolute right-3 top-20 z-[1100] w-[min(100%-1.5rem,22rem)] overflow-hidden rounded-2xl border border-white/10 bg-[#0b1628]/95 shadow-2xl backdrop-blur-xl">
+          <div className="flex items-center justify-between border-b border-white/10 px-3 py-2.5">
+            <p className="text-sm font-semibold">Notifications</p>
+            <div className="flex items-center gap-1">
+              {unreadNotifs > 0 && (
+                <button
+                  type="button"
+                  className="rounded-lg px-2 py-1 text-[11px] text-cyan-200 hover:bg-white/10"
+                  onClick={async () => {
+                    setNotifications((prev) => prev.map((n) => ({ ...n, read: 1 })));
+                    await apiMarkAllNotificationsRead('rider', user.id).catch(() => {});
+                  }}
+                >
+                  Mark all read
+                </button>
+              )}
+              <button type="button" className="rounded-lg p-1.5 text-white/50 hover:bg-white/10" onClick={() => setShowNotifs(false)}>
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+          <div className="max-h-64 overflow-y-auto">
+            {notifications.length === 0 && (
+              <p className="px-3 py-6 text-center text-xs text-white/40">No notifications yet</p>
+            )}
+            {notifications.map((n) => (
+              <button
+                key={n.id}
+                type="button"
+                className={`block w-full border-b border-white/5 px-3 py-2.5 text-left text-xs ${n.read ? 'text-white/45' : 'bg-cyan-500/10 text-white/90'}`}
+                onClick={async () => {
+                  setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: 1 } : x)));
+                  await apiMarkNotificationRead(n.id).catch(() => {});
+                }}
+              >
+                {n.message}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {podOrder && (
+        <div className="absolute inset-0 z-[1200] flex items-end justify-center bg-black/55 p-3 sm:items-center">
+          <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white text-slate-900 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+              <div>
+                <p className="text-sm font-bold">Proof of delivery</p>
+                <p className="text-xs text-slate-500">{podOrder.ref} · {podOrder.customerName || 'Customer'}</p>
+              </div>
+              <button type="button" onClick={() => setPodOrder(null)} className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="space-y-3 px-4 py-3">
+              {payLabel(podOrder).tone === 'cod' && (
+                <label className="block">
+                  <span className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+                    <Banknote size={13} /> Cash collected (₱)
+                  </span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={podCash}
+                    onChange={(e) => setPodCash(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-sky-400"
+                    placeholder={String(podOrder.total || '')}
+                  />
+                </label>
+              )}
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold text-slate-600">Delivery note (optional)</span>
+                <textarea
+                  value={podNote}
+                  onChange={(e) => setPodNote(e.target.value)}
+                  rows={2}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-sky-400"
+                  placeholder="Gate code, left with guard, etc."
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+                  <Camera size={13} /> Photo (optional)
+                </span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="block w-full text-xs text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) { setPodPhoto(null); return; }
+                    try {
+                      const dataUrl = await compressImageFile(file);
+                      setPodPhoto(dataUrl);
+                    } catch (err) {
+                      showToast(err.message || 'Could not process photo', 'err');
+                    }
+                  }}
+                />
+                {podPhoto && (
+                  <img src={podPhoto} alt="Proof preview" className="mt-2 h-28 w-full rounded-xl object-cover" />
+                )}
+              </label>
+            </div>
+            <div className="flex gap-2 border-t border-slate-100 px-4 py-3">
+              <button
+                type="button"
+                onClick={() => setPodOrder(null)}
+                className="flex-1 rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold text-slate-600"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={podBusy}
+                onClick={submitPod}
+                className="flex-1 rounded-xl bg-slate-900 px-3 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+              >
+                {podBusy ? 'Saving…' : 'Confirm delivered'}
+              </button>
             </div>
           </div>
         </div>

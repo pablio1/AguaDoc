@@ -305,14 +305,19 @@ export default function CustomerDashboard({ user, onLogout, onUpdateUser }) {
     });
   }, [outForDeliveryOrders]);
 
-  // Poll rider GPS while the live map is open
+  // Poll the assigned rider's GPS while the live map is open
   useEffect(() => {
     if (!trackingOrderId) return;
-    const loadRider = () => apiGetRiderLocation().then(setRider).catch(() => {});
+    const order = orders.find((o) => o.id === trackingOrderId);
+    const loadRider = () =>
+      apiGetRiderLocation({
+        riderId: order?.riderId || undefined,
+        orderId: trackingOrderId,
+      }).then(setRider).catch(() => {});
     loadRider();
     const interval = setInterval(loadRider, 4000);
     return () => clearInterval(interval);
-  }, [trackingOrderId]);
+  }, [trackingOrderId, orders]);
 
   // Draw route from rider → customer drop-off
   useEffect(() => {

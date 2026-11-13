@@ -176,7 +176,7 @@ async function fetchOsrmJson(pathAndQuery, { attempts = 3 } = {}) {
 }
 
 // ── Notifications helper ──
-// audience: 'admin' or 'customer'. userId is required (and only meaningful) for 'customer' notifications.
+// audience: 'admin' | 'customer' | 'rider'. userId required for customer + rider.
 async function createNotification({ audience, userId = null, message, type = 'System' }) {
   try {
     await pool.query(
@@ -186,6 +186,10 @@ async function createNotification({ audience, userId = null, message, type = 'Sy
   } catch (err) {
     console.warn('Failed to create notification:', err.message);
   }
+}
+
+function isWalkInOrderType(type) {
+  return Boolean(type && String(type).toLowerCase().includes('walk'));
 }
 
 // A walk-in customer's id only matches a real login if an admin explicitly linked their account
@@ -249,6 +253,11 @@ const SETTINGS_META = {
     secret: false,
     env: 'BACKEND_PUBLIC_URL',
   },
+  frontend_url: {
+    label: 'Frontend URL (customer app / production site)',
+    secret: false,
+    env: 'FRONTEND_URL',
+  },
   semaphore_api_key: {
     label: 'Semaphore SMS API key',
     secret: true,
@@ -266,7 +275,22 @@ const SETTINGS_META = {
   },
 };
 
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+function sanitizeFrontendBase(url) {
+  try {
+    const u = new URL(String(url || '').trim());
+    if (!['http:', 'https:'].includes(u.protocol)) return null;
+    return u.origin;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveFrontendBase(preferred) {
+  const fromPreferred = sanitizeFrontendBase(preferred);
+  const fromSettings = sanitizeFrontendBase(await getSetting('frontend_url'));
+  const fromEnv = sanitizeFrontendBase(process.env.FRONTEND_URL);
+  return fromPreferred || fromSettings || fromEnv || 'http://localhost:5173';
+}
 
 function isPlaceholderSecret(value) {
   if (value == null) return true;
@@ -411,12 +435,36 @@ app.get('/api/reverse-geocode', async (req, res) => {
   }
 });
 
-// Xendit redirects the customer's browser here after payment (this URL must be public/HTTPS,
-// which is why it points at this tunneled backend). We just bounce them back to your real,
-// local frontend — this route does nothing but forward the query params along.
-app.get('/return', (req, res) => {
-  const { checkout, orderId } = req.query;
-  res.redirect(`${FRONTEND_URL}/?checkout=${checkout}&orderId=${orderId}`);
+// Xendit redirects the customer's browser here after payment (must be public HTTPS via
+// backend_public_url). We bounce them to the real frontend (production site), not localhost.
+app.get('/return', async (req, res) => {
+  try {
+    const { checkout, orderId, front } = req.query;
+    const configured = await resolveFrontendBase();
+    const fromQuery = sanitizeFrontendBase(front);
+
+    let target = configured;
+    if (fromQuery) {
+      const cfgHost = new URL(configured).hostname;
+      const frontHost = new URL(fromQuery).hostname;
+      const allow =
+        fromQuery === configured ||
+        cfgHost === frontHost ||
+        cfgHost === 'localhost' ||
+        cfgHost === '127.0.0.1' ||
+        frontHost === 'localhost' ||
+        frontHost === '127.0.0.1';
+      if (allow) target = fromQuery;
+    }
+
+    const qs = new URLSearchParams();
+    if (checkout) qs.set('checkout', String(checkout));
+    if (orderId) qs.set('orderId', String(orderId));
+    res.redirect(`${target}/?${qs.toString()}`);
+  } catch (err) {
+    console.error('Checkout return redirect failed:', err.message);
+    res.status(500).send('Could not return to AguaDoc after payment. Please open the app manually.');
+  }
 });
 
 // ── AUTH ──
@@ -619,9 +667,18 @@ app.delete('/api/customers/:id', async (req, res) => {
 app.get('/api/notifications', async (req, res) => {
   const { audience, userId } = req.query;
   try {
-    const [rows] = audience === 'customer'
-      ? await pool.query('SELECT * FROM notifications WHERE audience = "customer" AND userId = ? ORDER BY createdAt DESC', [userId])
-      : await pool.query('SELECT * FROM notifications WHERE audience = "admin" ORDER BY createdAt DESC');
+    let rows;
+    if (audience === 'customer' || audience === 'rider') {
+      if (!userId) return res.status(400).json({ success: false, message: 'userId required' });
+      [rows] = await pool.query(
+        'SELECT * FROM notifications WHERE audience = ? AND userId = ? ORDER BY createdAt DESC LIMIT 50',
+        [audience, userId]
+      );
+    } else {
+      [rows] = await pool.query(
+        'SELECT * FROM notifications WHERE audience = "admin" ORDER BY createdAt DESC LIMIT 100'
+      );
+    }
     res.json(rows);
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -640,8 +697,12 @@ app.put('/api/notifications/:id/read', async (req, res) => {
 app.put('/api/notifications/read-all', async (req, res) => {
   const { audience, userId } = req.body;
   try {
-    if (audience === 'customer') {
-      await pool.query('UPDATE notifications SET `read` = 1 WHERE audience = "customer" AND userId = ?', [userId]);
+    if (audience === 'customer' || audience === 'rider') {
+      if (!userId) return res.status(400).json({ success: false, message: 'userId required' });
+      await pool.query(
+        'UPDATE notifications SET `read` = 1 WHERE audience = ? AND userId = ?',
+        [audience, userId]
+      );
     } else {
       await pool.query('UPDATE notifications SET `read` = 1 WHERE audience = "admin"');
     }
@@ -705,6 +766,13 @@ app.put('/api/orders/:id/assign-rider', async (req, res) => {
       });
     }
 
+    await createNotification({
+      audience: 'rider',
+      userId: riderId,
+      message: `New delivery assigned: ${order.ref} · ${order.quantity || 1} gal · ${order.address || 'see address in app'}`,
+      type: 'Order',
+    });
+
     const [[row]] = await pool.query(
       `SELECT o.*, r.fullName AS riderName
        FROM orders o
@@ -745,7 +813,7 @@ app.post('/api/orders', async (req, res) => {
   }
 });
 
-// ── RIDER BOOKINGS (admin assigns; riders only see their assigned runs) ──
+// ── RIDER BOOKINGS (admin assigns; open jobs can be claimed) ──
 app.get('/api/rider/bookings', async (req, res) => {
   try {
     const { riderId } = req.query;
@@ -773,16 +841,110 @@ app.get('/api/rider/bookings', async (req, res) => {
       [riderId]
     );
 
-    res.json({ available: [], mine, done });
+    const [available] = await pool.query(
+      `SELECT o.*, u.fullName AS customerName, u.phone AS customerPhone
+       FROM orders o
+       LEFT JOIN users u ON u.id = o.userId
+       WHERE (o.riderId IS NULL OR o.riderId = '')
+         AND o.status IN ('Pending', 'Processing')
+         AND (o.type IS NULL OR o.type NOT LIKE '%Walk%')
+       ORDER BY
+         CASE WHEN o.priority = 'priority' THEN 0 ELSE 1 END,
+         o.date ASC
+       LIMIT 30`
+    );
+
+    res.json({ available, mine, done });
   } catch (err) {
     console.error('Failed to load rider bookings:', err.message);
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
+app.put('/api/rider/bookings/:id/claim', async (req, res) => {
+  try {
+    const { riderId } = req.body;
+    if (!riderId) return res.status(400).json({ success: false, message: 'riderId required' });
+
+    const [[rider]] = await pool.query(
+      `SELECT id, fullName FROM users WHERE id = ? AND role = 'rider'`,
+      [riderId]
+    );
+    if (!rider) return res.status(400).json({ success: false, message: 'Rider not found' });
+
+    const [[order]] = await pool.query('SELECT * FROM orders WHERE id = ?', [req.params.id]);
+    if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+    if (isWalkInOrderType(order.type))
+      return res.status(400).json({ success: false, message: 'Walk-in orders do not need a rider' });
+    if (order.riderId && order.riderId !== riderId)
+      return res.status(409).json({ success: false, message: 'Already claimed by another rider' });
+    if (!['Pending', 'Processing', 'Assigned'].includes(order.status))
+      return res.status(400).json({ success: false, message: `Cannot claim ${order.status} order` });
+
+    await pool.query(
+      `UPDATE orders SET riderId = ?, status = 'Accepted' WHERE id = ?`,
+      [riderId, req.params.id]
+    );
+
+    if (order.userId) {
+      await createNotification({
+        audience: 'customer',
+        userId: order.userId,
+        message: `${rider.fullName} claimed your order ${order.ref} and is preparing delivery.`,
+        type: 'Order',
+      });
+    }
+    await createNotification({
+      audience: 'admin',
+      message: `${rider.fullName} claimed open job ${order.ref}.`,
+      type: 'Order',
+    });
+
+    const [[row]] = await pool.query(
+      `SELECT o.*, u.fullName AS customerName, u.phone AS customerPhone
+       FROM orders o LEFT JOIN users u ON u.id = o.userId WHERE o.id = ?`,
+      [req.params.id]
+    );
+    res.json(row);
+  } catch (err) {
+    console.error('Failed to claim booking:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.put('/api/rider/bookings/:id/decline', async (req, res) => {
+  try {
+    const { riderId, reason } = req.body;
+    if (!riderId) return res.status(400).json({ success: false, message: 'riderId required' });
+
+    const [[order]] = await pool.query('SELECT * FROM orders WHERE id = ?', [req.params.id]);
+    if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+    if (order.riderId !== riderId)
+      return res.status(403).json({ success: false, message: 'Not your booking' });
+    if (!['Assigned', 'Accepted'].includes(order.status))
+      return res.status(400).json({ success: false, message: 'Can only decline before delivery starts' });
+
+    await pool.query(
+      `UPDATE orders SET riderId = NULL, status = 'Pending' WHERE id = ?`,
+      [req.params.id]
+    );
+
+    await createNotification({
+      audience: 'admin',
+      message: `Rider declined ${order.ref}${reason ? `: ${reason}` : ''}. Order returned to unassigned.`,
+      type: 'Order',
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Failed to decline booking:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 app.put('/api/rider/bookings/:id/status', async (req, res) => {
   try {
-    const { riderId, status } = req.body;
+    const { riderId, status, podNote, podCashCollected, podPhoto } = req.body;
     const allowed = ['Assigned', 'Accepted', 'Processing', 'Out for Delivery', 'Delivered'];
     if (!riderId || !allowed.includes(status))
       return res.status(400).json({ success: false, message: 'Invalid riderId or status' });
@@ -793,12 +955,37 @@ app.put('/api/rider/bookings/:id/status', async (req, res) => {
       return res.status(403).json({ success: false, message: 'Not your booking' });
 
     const previousStatus = order.status;
-    await pool.query('UPDATE orders SET status = ? WHERE id = ?', [status, req.params.id]);
 
-    // COD payment + inventory consume when rider marks delivered
     if (status === 'Delivered' && status !== previousStatus) {
+      const cash = podCashCollected != null && podCashCollected !== ''
+        ? Number(podCashCollected)
+        : null;
+      if (cash != null && !Number.isFinite(cash))
+        return res.status(400).json({ success: false, message: 'Invalid cash amount' });
+
+      let photo = null;
+      if (typeof podPhoto === 'string' && podPhoto.startsWith('data:image/')) {
+        if (podPhoto.length > 900_000) {
+          return res.status(400).json({ success: false, message: 'Photo too large (max ~650KB)' });
+        }
+        photo = podPhoto;
+      }
+
+      await pool.query(
+        `UPDATE orders
+         SET status = 'Delivered',
+             deliveredAt = NOW(),
+             podNote = ?,
+             podCashCollected = ?,
+             podPhoto = ?
+         WHERE id = ?`,
+        [podNote || null, cash, photo, req.params.id]
+      );
+
       await settleOfflineOrderPayment({ ...order, status });
       await consumeInventoryForOrder(order);
+    } else {
+      await pool.query('UPDATE orders SET status = ? WHERE id = ?', [status, req.params.id]);
     }
 
     if (order.userId && status !== previousStatus) {
@@ -905,14 +1092,20 @@ function parseGeoapifyRoutes(data) {
       const coords = flattenGeoapifyCoords(result.geometry) ||
         (result.legs || []).flatMap((leg) => flattenGeoapifyCoords(leg.geometry));
       const steps = (result.legs || []).flatMap((leg) =>
-        (leg.steps || []).map((step) => ({
-          name: step.road_name || step.name || step.instruction?.text || '',
-          ref: '',
-          type: step.instruction?.type || step.maneuver?.type || 'continue',
-          modifier: step.instruction?.modifier || step.maneuver?.modifier || '',
-          distanceM: step.distance ?? step.distance_m ?? 0,
-          durationS: step.time ?? step.duration ?? 0,
-        }))
+        (leg.steps || []).map((step) => {
+          const loc = step.from?.[0] || step.maneuver?.location || step.location;
+          return {
+            name: step.road_name || step.name || step.instruction?.text || '',
+            ref: '',
+            type: step.instruction?.type || step.maneuver?.type || 'continue',
+            modifier: step.instruction?.modifier || step.maneuver?.modifier || '',
+            distanceM: step.distance ?? step.distance_m ?? 0,
+            durationS: step.time ?? step.duration ?? 0,
+            location: Array.isArray(loc)
+              ? { lat: Number(loc[1] ?? loc.lat), lng: Number(loc[0] ?? loc.lng) }
+              : (loc?.lat != null ? { lat: Number(loc.lat), lng: Number(loc.lng) } : null),
+          };
+        })
       );
       return {
         index,
@@ -930,14 +1123,20 @@ function parseGeoapifyRoutes(data) {
     const props = feature.properties || {};
     const coords = flattenGeoapifyCoords(feature.geometry);
     const steps = (props.legs || []).flatMap((leg) =>
-      (leg.steps || []).map((step) => ({
-        name: step.road_name || step.name || step.instruction?.text || '',
-        ref: '',
-        type: step.instruction?.type || 'continue',
-        modifier: step.instruction?.modifier || '',
-        distanceM: step.distance ?? 0,
-        durationS: step.time ?? 0,
-      }))
+      (leg.steps || []).map((step) => {
+        const loc = step.from?.[0] || step.maneuver?.location || step.location;
+        return {
+          name: step.road_name || step.name || step.instruction?.text || '',
+          ref: '',
+          type: step.instruction?.type || 'continue',
+          modifier: step.instruction?.modifier || '',
+          distanceM: step.distance ?? 0,
+          durationS: step.time ?? 0,
+          location: Array.isArray(loc)
+            ? { lat: Number(loc[1] ?? loc.lat), lng: Number(loc[0] ?? loc.lng) }
+            : (loc?.lat != null ? { lat: Number(loc.lat), lng: Number(loc.lng) } : null),
+        };
+      })
     );
     return {
       index,
@@ -1000,6 +1199,9 @@ app.get('/api/rider/route', async (req, res) => {
             modifier: step.maneuver?.modifier || '',
             distanceM: step.distance,
             durationS: step.duration,
+            location: Array.isArray(step.maneuver?.location)
+              ? { lng: step.maneuver.location[0], lat: step.maneuver.location[1] }
+              : null,
           }))
         );
         return {
@@ -1150,13 +1352,103 @@ app.get('/api/delivery-route', async (req, res) => {
   }
 });
 
-// ── RIDER LOCATION (live tracking) — a single shared row, updated by whichever
-// rider currently has the tracker page open. Good enough for one active delivery run;
-// would need a per-rider id if you ever have multiple riders out at once. ──
+// Assign today's pending delivery stops to a rider and notify them
+app.post('/api/delivery-route/send', async (req, res) => {
+  try {
+    const { riderId, orderIds } = req.body || {};
+    if (!riderId) return res.status(400).json({ success: false, message: 'riderId required' });
+
+    const [[rider]] = await pool.query(
+      `SELECT id, fullName FROM users WHERE id = ? AND role = 'rider'`,
+      [riderId]
+    );
+    if (!rider) return res.status(400).json({ success: false, message: 'Rider not found' });
+
+    let orders;
+    if (Array.isArray(orderIds) && orderIds.length) {
+      const placeholders = orderIds.map(() => '?').join(',');
+      [orders] = await pool.query(
+        `SELECT * FROM orders WHERE id IN (${placeholders})`,
+        orderIds
+      );
+    } else {
+      [orders] = await pool.query(
+        `SELECT * FROM orders
+         WHERE status IN ('Pending','Assigned','Accepted','Processing')
+           AND (type IS NULL OR type NOT LIKE '%Walk%')
+           AND (riderId IS NULL OR riderId = '' OR riderId = ?)
+         ORDER BY date ASC`,
+        [riderId]
+      );
+    }
+
+    const assignable = orders.filter(
+      (o) => !['Delivered', 'Cancelled', 'Ready to Go'].includes(o.status)
+    );
+    if (!assignable.length) {
+      return res.status(400).json({ success: false, message: 'No delivery stops to send' });
+    }
+
+    for (const order of assignable) {
+      const nextStatus = ['Assigned', 'Accepted', 'Processing', 'Out for Delivery'].includes(order.status)
+        ? order.status
+        : 'Assigned';
+      await pool.query(
+        `UPDATE orders SET riderId = ?, status = ? WHERE id = ?`,
+        [riderId, nextStatus, order.id]
+      );
+    }
+
+    const stopSummary = assignable
+      .slice(0, 5)
+      .map((o) => o.ref || o.id)
+      .join(', ');
+    const extra = assignable.length > 5 ? ` (+${assignable.length - 5} more)` : '';
+
+    await createNotification({
+      audience: 'rider',
+      userId: riderId,
+      message: `Route sent: ${assignable.length} stop${assignable.length === 1 ? '' : 's'} — ${stopSummary}${extra}. Open Rider to navigate.`,
+      type: 'Order',
+    });
+
+    res.json({
+      success: true,
+      riderId,
+      riderName: rider.fullName,
+      count: assignable.length,
+      orderIds: assignable.map((o) => o.id),
+    });
+  } catch (err) {
+    console.error('Failed to send route to driver:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ── RIDER LOCATION (live tracking) — one row per rider user id ──
 app.get('/api/rider-location', async (req, res) => {
   try {
-    const [[row]] = await pool.query('SELECT lat, lng, updatedAt FROM rider_location WHERE id = "main"');
-    res.json(row || { lat: null, lng: null, updatedAt: null });
+    let riderId = req.query.riderId || null;
+    const orderId = req.query.orderId || null;
+
+    if (!riderId && orderId) {
+      const [[order]] = await pool.query('SELECT riderId FROM orders WHERE id = ?', [orderId]);
+      riderId = order?.riderId || null;
+    }
+
+    if (!riderId) {
+      // Legacy fallback: newest location among all riders (single-rider installs)
+      const [[row]] = await pool.query(
+        'SELECT id AS riderId, lat, lng, updatedAt FROM rider_location ORDER BY updatedAt DESC LIMIT 1'
+      );
+      return res.json(row || { lat: null, lng: null, updatedAt: null, riderId: null });
+    }
+
+    const [[row]] = await pool.query(
+      'SELECT id AS riderId, lat, lng, updatedAt FROM rider_location WHERE id = ?',
+      [riderId]
+    );
+    res.json(row || { riderId, lat: null, lng: null, updatedAt: null });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -1164,8 +1456,26 @@ app.get('/api/rider-location', async (req, res) => {
 
 app.post('/api/rider-location', async (req, res) => {
   try {
-    const { lat, lng } = req.body;
-    await pool.query('UPDATE rider_location SET lat = ?, lng = ?, updatedAt = NOW() WHERE id = "main"', [lat, lng]);
+    const { lat, lng, riderId } = req.body;
+    if (!riderId) return res.status(400).json({ success: false, message: 'riderId required' });
+    if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) {
+      return res.status(400).json({ success: false, message: 'lat/lng required' });
+    }
+
+    await pool.query(
+      `INSERT INTO rider_location (id, lat, lng, updatedAt)
+       VALUES (?, ?, ?, NOW())
+       ON DUPLICATE KEY UPDATE lat = VALUES(lat), lng = VALUES(lng), updatedAt = NOW()`,
+      [riderId, Number(lat), Number(lng)]
+    );
+    // Keep legacy "main" row in sync for any old clients still reading it
+    await pool.query(
+      `INSERT INTO rider_location (id, lat, lng, updatedAt)
+       VALUES ('main', ?, ?, NOW())
+       ON DUPLICATE KEY UPDATE lat = VALUES(lat), lng = VALUES(lng), updatedAt = NOW()`,
+      [Number(lat), Number(lng)]
+    ).catch(() => {});
+
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -1199,6 +1509,12 @@ app.post('/api/checkout', async (req, res) => {
       });
     }
 
+    // Prefer the page the customer checked out from (production domain), then Settings → Frontend URL.
+    const frontendBase = await resolveFrontendBase(
+      req.body?.returnOrigin || req.get('origin') || req.get('referer')
+    );
+    const frontQs = `&front=${encodeURIComponent(frontendBase)}`;
+
     const session = await xenditRequest('/sessions', {
       reference_id: newId, // carried straight through to the webhook — used to find this order again
       session_type: 'PAY',
@@ -1213,8 +1529,8 @@ app.post('/api/checkout', async (req, res) => {
         email: user?.email || undefined,
         individual_detail: { given_names: user?.fullName || 'Customer' },
       },
-      success_return_url: `${backendPublicUrl}/return?checkout=success&orderId=${newId}`,
-      cancel_return_url:  `${backendPublicUrl}/return?checkout=cancel&orderId=${newId}`,
+      success_return_url: `${backendPublicUrl}/return?checkout=success&orderId=${newId}${frontQs}`,
+      cancel_return_url:  `${backendPublicUrl}/return?checkout=cancel&orderId=${newId}${frontQs}`,
     });
 
     await pool.query('UPDATE orders SET checkoutSessionId = ? WHERE id = ?', [session.payment_session_id, newId]);

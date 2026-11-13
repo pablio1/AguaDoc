@@ -430,6 +430,7 @@ export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }
         total,
         lat: pin.lat,
         lng: pin.lng,
+        returnOrigin: window.location.origin,
       });
       window.location.href = checkoutUrl;
     } catch {
