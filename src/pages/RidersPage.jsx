@@ -56,15 +56,15 @@ export default function RidersPage() {
   }
 
   async function handleCreate() {
-    if (!form.fullName.trim() || !form.phone.trim()) {
-      showToast('⚠ Name and phone are required.');
+    if (!form.fullName.trim() || !form.username.trim() || !form.phone.trim()) {
+      showToast('⚠ Name, username, and phone are required.');
       return;
     }
     setSaving(true);
     try {
       const created = await apiCreateRider({
         fullName: form.fullName.trim(),
-        username: form.username.trim() || undefined,
+        username: form.username.trim(),
         phone: form.phone.trim(),
         email: form.email.trim() || undefined,
         address: form.address.trim() || undefined,
@@ -279,12 +279,13 @@ export default function RidersPage() {
             </div>
             <div className="grid grid-cols-2 gap-2.5">
               <div>
-                <label className="agua-label">Username (optional)</label>
+                <label className="agua-label">Username *</label>
                 <input
                   className="agua-input"
                   value={form.username}
                   onChange={(e) => setForm({ ...form, username: e.target.value })}
-                  placeholder="Auto if blank"
+                  placeholder="e.g. juan.rider"
+                  autoComplete="off"
                 />
               </div>
               <div>

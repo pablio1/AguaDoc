@@ -559,13 +559,6 @@ function generateRiderPassword(length = 10) {
   return out;
 }
 
-function slugUsername(base) {
-  return String(base || 'rider')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '')
-    .slice(0, 16) || 'rider';
-}
-
 // Admin: list riders
 app.get('/api/riders', async (req, res) => {
   try {
@@ -587,22 +580,15 @@ app.post('/api/riders', async (req, res) => {
     if (!fullName || !String(fullName).trim()) {
       return res.status(400).json({ success: false, message: 'Full name is required.' });
     }
+    if (!rawUsername || !String(rawUsername).trim()) {
+      return res.status(400).json({ success: false, message: 'Username is required.' });
+    }
     if (!phone || !String(phone).trim()) {
       return res.status(400).json({ success: false, message: 'Phone is required.' });
     }
 
-    let username = String(rawUsername || '').trim().toLowerCase();
-    if (!username) {
-      const base = slugUsername(fullName.split(/\s+/)[0]);
-      username = base;
-      let n = 1;
-      while (true) {
-        const [[clash]] = await pool.query('SELECT id FROM users WHERE username = ? LIMIT 1', [username]);
-        if (!clash) break;
-        n += 1;
-        username = `${base}${n}`;
-      }
-    } else if (!/^[a-z0-9._-]{3,32}$/.test(username)) {
+    const username = String(rawUsername).trim().toLowerCase();
+    if (!/^[a-z0-9._-]{3,32}$/.test(username)) {
       return res.status(400).json({
         success: false,
         message: 'Username must be 3–32 characters (letters, numbers, . _ -).',
