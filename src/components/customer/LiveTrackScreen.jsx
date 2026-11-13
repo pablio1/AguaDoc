@@ -238,14 +238,28 @@ export default function LiveTrackScreen({
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-[15px] font-bold text-slate-900">
-              {order.status === 'Out for Delivery' ? 'Rider is on the way' : `${riderName} assigned`}
+              {order.status === 'Out for Delivery'
+                ? (order.tripLeg === 'to_station'
+                  ? 'Rider took your jug to refill'
+                  : order.tripLeg === 'deliver'
+                    ? 'Rider is returning with your water'
+                    : order.tripLeg === 'pickup' || String(order.productId || '').startsWith('refill-')
+                      ? 'Rider is coming to pick up your jug'
+                      : 'Rider is on the way')
+                : `${riderName} assigned`}
             </p>
             <p className="truncate text-xs text-slate-500">
-              {riderIsLive
-                ? 'Your order is on the way to you'
-                : order.status === 'Out for Delivery'
-                  ? 'Waiting for live GPS…'
-                  : 'We’ll show the truck when delivery starts'}
+              {order.status === 'Out for Delivery' && order.tripLeg === 'to_station'
+                ? 'Empty jug collected · refilling at AguaDoc Station'
+                : order.status === 'Out for Delivery' && order.tripLeg === 'deliver'
+                  ? (riderIsLive ? 'Filled jug is on the way back to you' : 'Waiting for live GPS…')
+                  : riderIsLive
+                    ? (order.tripLeg === 'pickup' || String(order.productId || '').startsWith('refill-')
+                      ? 'Prepare your empty container for pickup'
+                      : 'Your order is on the way to you')
+                    : order.status === 'Out for Delivery'
+                      ? 'Waiting for live GPS…'
+                      : 'We’ll show the truck when delivery starts'}
             </p>
           </div>
           {riderPhone ? (

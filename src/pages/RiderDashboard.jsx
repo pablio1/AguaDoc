@@ -9,6 +9,7 @@ import {
 import {
   apiGetRiderBookings,
   apiUpdateRiderBookingStatus,
+  apiUpdateRiderTripLeg,
   apiClaimRiderBooking,
   apiDeclineRiderBooking,
   apiPostRiderLocation,
@@ -19,8 +20,41 @@ import {
 } from '../api';
 import GeoMap from '../components/map/GeoMap';
 import { formatMoney } from '../lib/money';
+import {
+  REFILL_STATION,
+  REFILL_TRIP_STEPS,
+  isRefillOrder,
+  getServiceProduct,
+} from '../lib/products';
 
-const DEPOT = [10.3157, 123.9740];
+const DEPOT = [REFILL_STATION.lat, REFILL_STATION.lng];
+
+function navDestination(order) {
+  if (!order) return null;
+  if (isRefillOrder(order) && (order.tripLeg || 'pickup') === 'to_station') {
+    return {
+      lat: REFILL_STATION.lat,
+      lng: REFILL_STATION.lng,
+      label: REFILL_STATION.name,
+      kind: 'station',
+    };
+  }
+  if (order.lat == null || order.lng == null) return null;
+  const leg = order.tripLeg || (isRefillOrder(order) ? 'pickup' : 'deliver');
+  return {
+    lat: Number(order.lat),
+    lng: Number(order.lng),
+    label: order.address || 'Customer',
+    kind: leg === 'pickup' ? 'pickup' : 'deliver',
+  };
+}
+
+function tripLegLabel(order) {
+  if (!isRefillOrder(order)) return null;
+  const leg = order.tripLeg || 'pickup';
+  const step = REFILL_TRIP_STEPS.find((s) => s.id === leg);
+  return step?.label || leg;
+}
 
 function toRad(d) { return d * Math.PI / 180; }
 function toDeg(r) { return r * 180 / Math.PI; }
@@ -221,8 +255,9 @@ function compressImageFile(file, maxSide = 960, quality = 0.72) {
 }
 
 function externalMapsUrl(order) {
-  if (order?.lat == null || order?.lng == null) return null;
-  return `https://www.google.com/maps/dir/?api=1&destination=${Number(order.lat)},${Number(order.lng)}&travelmode=driving`;
+  const dest = navDestination(order);
+  if (!dest) return null;
+  return `https://www.google.com/maps/dir/?api=1&destination=${dest.lat},${dest.lng}&travelmode=driving`;
 }
 
 function routeLabel(route, index, fastestIdx, shortestIdx) {
@@ -378,10 +413,12 @@ export default function RiderDashboard({ user, onLogout }) {
     }
   }, [mine, sharing, startGps]);
 
+  const activeDest = useMemo(() => navDestination(activeOrder), [activeOrder]);
+
   useEffect(() => {
     let cancelled = false;
     async function run() {
-      if (!activeOrder?.lat || !activeOrder?.lng) {
+      if (!activeDest?.lat || !activeDest?.lng) {
         setRoutes([]);
         setRouteStatus('idle');
         setRouteWarning('');
@@ -393,7 +430,7 @@ export default function RiderDashboard({ user, onLogout }) {
         return;
       }
 
-      const destKey = `${activeOrder.id}:${Number(activeOrder.lat)},${Number(activeOrder.lng)}`;
+      const destKey = `${activeOrder?.id}:${activeDest.kind}:${Number(activeDest.lat)},${Number(activeDest.lng)}`;
       const prev = lastFetchRef.current;
       const moved = prev.lat != null ? distanceM({ lat: prev.lat, lng: prev.lng }, gps) : 9999;
       const elapsed = Date.now() - prev.t;
@@ -406,7 +443,7 @@ export default function RiderDashboard({ user, onLogout }) {
       setRouteStatus((s) => (s === 'ready' || s === 'fallback' ? s : 'loading'));
 
       try {
-        const data = await apiGetRiderRoute(gps.lat, gps.lng, activeOrder.lat, activeOrder.lng);
+        const data = await apiGetRiderRoute(gps.lat, gps.lng, activeDest.lat, activeDest.lng);
         if (cancelled || requestId !== routeRequestRef.current) return;
 
         if (data.success === false) {
@@ -480,7 +517,7 @@ export default function RiderDashboard({ user, onLogout }) {
     }
     run();
     return () => { cancelled = true; };
-  }, [gps, activeOrder?.id, activeOrder?.lat, activeOrder?.lng, routeTick]);
+  }, [gps, activeOrder?.id, activeDest?.lat, activeDest?.lng, activeDest?.kind, routeTick]);
 
   function retryRoute() {
     lastFetchRef.current = { t: 0, lat: null, lng: null, destKey: null, ok: false };
@@ -580,6 +617,26 @@ export default function RiderDashboard({ user, onLogout }) {
     }
   }
 
+  async function advanceTripLeg(order, tripLeg) {
+    setBusyId(order.id);
+    try {
+      await apiUpdateRiderTripLeg(order.id, user.id, tripLeg);
+      setActiveId(order.id);
+      setFollow(true);
+      setNavOpen(true);
+      setPickingRoute(false);
+      lastFetchRef.current = { t: 0, lat: null, lng: null, destKey: null, ok: false };
+      setRouteTick((n) => n + 1);
+      if (tripLeg === 'to_station') showToast('Heading to refill station');
+      if (tripLeg === 'deliver') showToast('Returning to customer with filled jug');
+      await load();
+    } catch (e) {
+      showToast(e.message, 'err');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   function openNavigation(order) {
     setActiveId(order.id);
     setFollow(true);
@@ -597,10 +654,14 @@ export default function RiderDashboard({ user, onLogout }) {
 
   const list = tab === 'open' ? available : tab === 'active' ? mine : done;
   const unreadNotifs = notifications.filter((n) => !n.read).length;
-  const mapCenter = gps ? [gps.lat, gps.lng] : activeOrder?.lat ? [activeOrder.lat, activeOrder.lng] : DEPOT;
+  const mapCenter = gps
+    ? [gps.lat, gps.lng]
+    : activeDest
+      ? [activeDest.lat, activeDest.lng]
+      : DEPOT;
   const fitPoints = [
     gps ? [gps.lat, gps.lng] : null,
-    activeOrder?.lat != null ? [Number(activeOrder.lat), Number(activeOrder.lng)] : null,
+    activeDest ? [activeDest.lat, activeDest.lng] : null,
   ];
 
   const currentRoute = routes[selectedRoute] || routes[0] || null;
@@ -662,12 +723,12 @@ export default function RiderDashboard({ user, onLogout }) {
               html: arrowHtml(navigating && follow ? 0 : heading),
               popupHtml: 'You are here',
             },
-            activeOrder?.lat != null && activeOrder?.lng != null && {
+            activeDest && {
               id: 'drop',
-              lat: Number(activeOrder.lat),
-              lng: Number(activeOrder.lng),
+              lat: activeDest.lat,
+              lng: activeDest.lng,
               html: dropHtml,
-              popupHtml: `<strong>${activeOrder.ref || ''}</strong><br/>${activeOrder.address || ''}`,
+              popupHtml: `<strong>${activeDest.kind === 'station' ? 'Refill station' : (activeOrder?.ref || '')}</strong><br/>${activeDest.label || ''}`,
             },
           ].filter(Boolean)}
           routes={[
@@ -873,6 +934,32 @@ export default function RiderDashboard({ user, onLogout }) {
 
       {navigating && (
         <div className="absolute bottom-0 inset-x-0 z-[1000] px-3 pb-3">
+          {activeOrder && isRefillOrder(activeOrder) && activeOrder.status === 'Out for Delivery' && (
+            <div className="mx-auto mb-2 max-w-xl rounded-2xl bg-white/95 px-3 py-2.5 shadow-lg ring-1 ring-slate-200">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                Refill round-trip · {activeDest?.label || 'Next stop'}
+              </p>
+              <div className="flex gap-1">
+                {REFILL_TRIP_STEPS.map((step) => {
+                  const current = activeOrder.tripLeg || 'pickup';
+                  const curIdx = REFILL_TRIP_STEPS.findIndex((s) => s.id === current);
+                  const idx = REFILL_TRIP_STEPS.findIndex((s) => s.id === step.id);
+                  const done = idx < curIdx;
+                  const active = idx === curIdx;
+                  return (
+                    <div
+                      key={step.id}
+                      className={`flex-1 rounded-lg px-1.5 py-1.5 text-center ${
+                        active ? 'bg-emerald-600 text-white' : done ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'
+                      }`}
+                    >
+                      <p className="text-[10px] font-bold leading-tight">{idx + 1}. {step.label}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div className="mx-auto flex max-w-xl items-center gap-3 rounded-2xl bg-white px-3 py-3 shadow-[0_-8px_30px_rgba(15,42,74,0.12)]">
             <button
               type="button"
@@ -887,6 +974,7 @@ export default function RiderDashboard({ user, onLogout }) {
               <p className="mt-1 text-xs text-slate-500">
                 {formatKm(currentRoute?.distanceM)}
                 {currentRoute?.durationS ? ` · ${formatArrival(currentRoute.durationS)}` : ''}
+                {activeDest ? ` · ${activeDest.kind === 'station' ? 'Station' : activeDest.kind === 'pickup' ? 'Pickup' : 'Drop-off'}` : ''}
               </p>
             </div>
             <button
@@ -900,14 +988,36 @@ export default function RiderDashboard({ user, onLogout }) {
           </div>
           {activeOrder?.status === 'Out for Delivery' && (
             <div className="mx-auto mt-2 max-w-xl">
-              <button
-                type="button"
-                disabled={busyId === activeOrder.id}
-                onClick={() => setStatus(activeOrder, 'Delivered')}
-                className="w-full rounded-xl bg-slate-900 px-3 py-2.5 text-xs font-bold text-white disabled:opacity-60"
-              >
-                Mark delivered
-              </button>
+              {isRefillOrder(activeOrder) && (activeOrder.tripLeg || 'pickup') === 'pickup' && (
+                <button
+                  type="button"
+                  disabled={busyId === activeOrder.id}
+                  onClick={() => advanceTripLeg(activeOrder, 'to_station')}
+                  className="w-full rounded-xl bg-sky-600 px-3 py-2.5 text-xs font-bold text-white disabled:opacity-60"
+                >
+                  Container collected · go to station
+                </button>
+              )}
+              {isRefillOrder(activeOrder) && activeOrder.tripLeg === 'to_station' && (
+                <button
+                  type="button"
+                  disabled={busyId === activeOrder.id}
+                  onClick={() => advanceTripLeg(activeOrder, 'deliver')}
+                  className="w-full rounded-xl bg-violet-600 px-3 py-2.5 text-xs font-bold text-white disabled:opacity-60"
+                >
+                  Refilled · return to customer
+                </button>
+              )}
+              {(!isRefillOrder(activeOrder) || activeOrder.tripLeg === 'deliver') && (
+                <button
+                  type="button"
+                  disabled={busyId === activeOrder.id}
+                  onClick={() => setStatus(activeOrder, 'Delivered')}
+                  className="w-full rounded-xl bg-slate-900 px-3 py-2.5 text-xs font-bold text-white disabled:opacity-60"
+                >
+                  Mark delivered
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -999,12 +1109,17 @@ export default function RiderDashboard({ user, onLogout }) {
                           </span>
                         </div>
                         <p className="mt-0.5 truncate text-xs text-white/55">
-                          {order.customerName || 'Customer'} · {order.quantity} gal · {formatMoney(order.total)}
+                          {order.customerName || 'Customer'} · {order.quantity} × {getServiceProduct(order.productId).shortLabel} · {formatMoney(order.total)}
                         </p>
                         <p className="mt-1 flex items-start gap-1 text-xs text-white/40">
                           <MapPin size={12} className="mt-0.5 shrink-0" />
                           <span className="line-clamp-2">{order.address || 'No address'}</span>
                         </p>
+                        {isRefillOrder(order) && (
+                          <p className="mt-1 text-[11px] font-semibold text-amber-200/90">
+                            Round-trip refill{order.status === 'Out for Delivery' ? ` · ${tripLegLabel(order)}` : ' · pickup → station → return'}
+                          </p>
+                        )}
                         {order.notes && (
                           <p className="mt-1 line-clamp-2 text-[11px] text-cyan-100/70">
                             Note: {order.notes}
@@ -1068,11 +1183,33 @@ export default function RiderDashboard({ user, onLogout }) {
                           className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 px-3 py-2 text-xs font-bold text-white shadow-md shadow-emerald-500/25 disabled:opacity-60"
                         >
                           <Navigation size={14} />
-                          Start delivery
+                          {isRefillOrder(order) ? 'Start pickup' : 'Start delivery'}
                         </button>
                       )}
 
-                      {tab === 'active' && order.status === 'Out for Delivery' && (
+                      {tab === 'active' && order.status === 'Out for Delivery' && isRefillOrder(order) && (order.tripLeg || 'pickup') === 'pickup' && (
+                        <button
+                          type="button"
+                          disabled={busyId === order.id}
+                          onClick={() => advanceTripLeg(order, 'to_station')}
+                          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-sky-500 px-3 py-2 text-xs font-bold text-white disabled:opacity-60"
+                        >
+                          Container collected
+                        </button>
+                      )}
+
+                      {tab === 'active' && order.status === 'Out for Delivery' && isRefillOrder(order) && order.tripLeg === 'to_station' && (
+                        <button
+                          type="button"
+                          disabled={busyId === order.id}
+                          onClick={() => advanceTripLeg(order, 'deliver')}
+                          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-violet-500 px-3 py-2 text-xs font-bold text-white disabled:opacity-60"
+                        >
+                          Refilled · return
+                        </button>
+                      )}
+
+                      {tab === 'active' && order.status === 'Out for Delivery' && (!isRefillOrder(order) || order.tripLeg === 'deliver') && (
                         <button
                           type="button"
                           disabled={busyId === order.id}
@@ -1084,7 +1221,7 @@ export default function RiderDashboard({ user, onLogout }) {
                         </button>
                       )}
 
-                      {order.lat != null && order.lng != null && tab !== 'open' && (
+                      {navDestination(order) && tab !== 'open' && (
                         <button
                           type="button"
                           onClick={() => openNavigation(order)}

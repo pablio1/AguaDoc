@@ -7,6 +7,9 @@ const {
   getServiceProduct,
   stockDeductionsForOrder,
   DEFAULT_PRODUCT_ID,
+  isRefillProduct,
+  initialTripLeg,
+  REFILL_TRIP_LEGS,
 } = require('./lib/products');
 
 const app  = express();
@@ -1131,6 +1134,63 @@ app.put('/api/rider/bookings/:id/decline', async (req, res) => {
   }
 });
 
+app.put('/api/rider/bookings/:id/trip-leg', async (req, res) => {
+  try {
+    const { riderId, tripLeg } = req.body || {};
+    if (!riderId || !REFILL_TRIP_LEGS.includes(tripLeg)) {
+      return res.status(400).json({ success: false, message: 'Invalid riderId or tripLeg' });
+    }
+
+    const [[order]] = await pool.query('SELECT * FROM orders WHERE id = ?', [req.params.id]);
+    if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+    if (order.riderId !== riderId)
+      return res.status(403).json({ success: false, message: 'Not your booking' });
+    if (order.status !== 'Out for Delivery') {
+      return res.status(400).json({ success: false, message: 'Start delivery before advancing the trip' });
+    }
+    if (!isRefillProduct(order.productId)) {
+      return res.status(400).json({ success: false, message: 'Trip legs only apply to refill orders' });
+    }
+
+    const current = order.tripLeg || 'pickup';
+    const curIdx = REFILL_TRIP_LEGS.indexOf(current);
+    const nextIdx = REFILL_TRIP_LEGS.indexOf(tripLeg);
+    if (nextIdx < 0 || nextIdx > curIdx + 1) {
+      return res.status(400).json({
+        success: false,
+        message: `Advance one step at a time (now: ${current})`,
+      });
+    }
+
+    await pool.query('UPDATE orders SET tripLeg = ? WHERE id = ?', [tripLeg, order.id]);
+
+    if (order.userId) {
+      const msg =
+        tripLeg === 'to_station'
+          ? `Rider collected your empty jug for ${order.ref} and is heading to AguaDoc to refill.`
+          : tripLeg === 'deliver'
+            ? `Your water for ${order.ref} is refilled — rider is returning to deliver it.`
+            : `Rider is on the way to pick up your empty jug for ${order.ref}.`;
+      await createNotification({
+        audience: 'customer',
+        userId: order.userId,
+        message: msg,
+        type: 'Order',
+      });
+    }
+
+    const [[row]] = await pool.query(
+      `SELECT o.*, u.fullName AS customerName, u.phone AS customerPhone
+       FROM orders o LEFT JOIN users u ON u.id = o.userId WHERE o.id = ?`,
+      [order.id]
+    );
+    res.json(row);
+  } catch (err) {
+    console.error('Failed to update trip leg:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 app.put('/api/rider/bookings/:id/status', async (req, res) => {
   try {
     const { riderId, status, podNote, podCashCollected, podPhoto } = req.body;
@@ -1144,8 +1204,16 @@ app.put('/api/rider/bookings/:id/status', async (req, res) => {
       return res.status(403).json({ success: false, message: 'Not your booking' });
 
     const previousStatus = order.status;
+    const refill = isRefillProduct(order.productId);
 
     if (status === 'Delivered' && status !== previousStatus) {
+      if (refill && order.tripLeg && order.tripLeg !== 'deliver') {
+        return res.status(400).json({
+          success: false,
+          message: 'Finish the refill round-trip first (pickup → station → return) before marking delivered.',
+        });
+      }
+
       const cash = podCashCollected != null && podCashCollected !== ''
         ? Number(podCashCollected)
         : null;
@@ -1163,6 +1231,7 @@ app.put('/api/rider/bookings/:id/status', async (req, res) => {
       await pool.query(
         `UPDATE orders
          SET status = 'Delivered',
+             tripLeg = 'deliver',
              deliveredAt = NOW(),
              podNote = ?,
              podCashCollected = ?,
@@ -1173,21 +1242,31 @@ app.put('/api/rider/bookings/:id/status', async (req, res) => {
 
       await settleOfflineOrderPayment({ ...order, status });
       await consumeInventoryForOrder(order);
+    } else if (status === 'Out for Delivery' && status !== previousStatus) {
+      const leg = initialTripLeg(order.productId);
+      await pool.query(
+        'UPDATE orders SET status = ?, tripLeg = ? WHERE id = ?',
+        [status, leg, req.params.id]
+      );
     } else {
       await pool.query('UPDATE orders SET status = ? WHERE id = ?', [status, req.params.id]);
     }
 
     if (order.userId && status !== previousStatus) {
+      let message = `Your order ${order.ref} is now ${status}.`;
+      if (status === 'Out for Delivery') {
+        message = refill
+          ? `Rider is on the way to pick up your empty jug for ${order.ref} (refill round-trip).`
+          : `Your order ${order.ref} is out for delivery — track your rider live.`;
+      } else if (status === 'Delivered') {
+        message = `Your order ${order.ref} has been delivered. Thank you!`;
+      } else if (status === 'Accepted') {
+        message = `Your order ${order.ref} was accepted by your rider. Delivery is being prepared.`;
+      }
       await createNotification({
         audience: 'customer',
         userId: order.userId,
-        message: status === 'Out for Delivery'
-          ? `Your order ${order.ref} is out for delivery — track your rider live.`
-          : status === 'Delivered'
-            ? `Your order ${order.ref} has been delivered. Thank you!`
-            : status === 'Accepted'
-              ? `Your order ${order.ref} was accepted by your rider. Delivery is being prepared.`
-              : `Your order ${order.ref} is now ${status}.`,
+        message,
         type: 'Order',
       });
     }

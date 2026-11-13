@@ -109,6 +109,15 @@ export async function apiUpdateRiderBookingStatus(orderId, riderId, status, pod 
   if (!res.ok) throw new Error(result.message || 'Could not update status');
   return result;
 }
+export async function apiUpdateRiderTripLeg(orderId, riderId, tripLeg) {
+  const res = await fetch(`${BASE}/rider/bookings/${orderId}/trip-leg`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ riderId, tripLeg }),
+  });
+  const result = await res.json();
+  if (!res.ok) throw new Error(result.message || 'Could not update trip leg');
+  return result;
+}
 export async function apiClaimRiderBooking(orderId, riderId) {
   const res = await fetch(`${BASE}/rider/bookings/${orderId}/claim`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },

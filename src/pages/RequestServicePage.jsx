@@ -155,7 +155,9 @@ function ProductPicker({ value, onChange }) {
     <div className="overflow-hidden rounded-[22px] border border-slate-200/80 bg-white shadow-sm">
       <div className="border-b border-slate-100 px-4 py-3">
         <SectionLabel required>Item &amp; container type</SectionLabel>
-        <p className="mt-[-0.35rem] text-xs text-muted">Choose refill or a new jug — this deducts the matching stock when fulfilled.</p>
+        <p className="mt-[-0.35rem] text-xs text-muted">
+          Refills are a round-trip (pickup jug → station → return). New jugs are one-way delivery.
+        </p>
       </div>
       <div className="divide-y divide-slate-100">
         {SERVICE_PRODUCTS.map((p) => {
@@ -177,7 +179,9 @@ function ProductPicker({ value, onChange }) {
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-semibold text-ink">{p.label}</span>
                 <span className="mt-0.5 block text-[11px] text-muted">
-                  {p.kind === 'refill' ? 'Water refill only · bring your jug' : 'New container filled with water'}
+                  {p.kind === 'refill'
+                    ? 'Round-trip · rider picks up your empty jug, refills, then returns'
+                    : 'One-way · new filled container delivered to you'}
                 </span>
               </span>
               <span className="shrink-0 text-sm font-bold tabular-nums text-blue-600">
