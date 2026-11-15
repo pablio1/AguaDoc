@@ -15,34 +15,101 @@ const DELIVERY_FEE = 20;
 const DEFAULT_CENTER = { lat: 10.3157, lng: 123.9740 };
 const GALLON_PRESETS = [1, 2, 3, 5, 10];
 
-const pinHtml = `<div style="
-    width:36px;height:36px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);
-    background:linear-gradient(135deg,#3b82f6,#2563eb);border:3px solid #fff;
-    box-shadow:0 6px 16px rgba(59,130,246,.4);display:flex;align-items:center;justify-content:center;
-  "><span style="transform:rotate(45deg);font-size:14px">💧</span></div>`;
+function deliveryPinHtml({ pulsing = false } = {}) {
+  const pulse = pulsing
+    ? `<span style="
+        position:absolute;left:50%;top:50%;width:64px;height:64px;margin:-32px 0 0 -32px;
+        border-radius:50%;background:rgba(37,99,235,.22);
+        animation:aguadoc-pin-pulse 1.6s ease-out infinite;
+      "></span>
+      <span style="
+        position:absolute;left:50%;top:50%;width:96px;height:96px;margin:-48px 0 0 -48px;
+        border-radius:50%;border:2px solid rgba(37,99,235,.28);
+        animation:aguadoc-pin-ring 1.6s ease-out infinite;
+      "></span>`
+    : '';
+  return `<div style="position:relative;width:48px;height:58px;display:flex;align-items:flex-end;justify-content:center;">
+    <style>
+      @keyframes aguadoc-pin-pulse {
+        0% { transform:scale(.55); opacity:.75; }
+        100% { transform:scale(1.35); opacity:0; }
+      }
+      @keyframes aguadoc-pin-ring {
+        0% { transform:scale(.4); opacity:.9; }
+        100% { transform:scale(1.25); opacity:0; }
+      }
+    </style>
+    ${pulse}
+    <div style="
+      position:relative;z-index:2;width:40px;height:40px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);
+      background:linear-gradient(145deg,#60a5fa,#2563eb 55%,#1d4ed8);border:3px solid #fff;
+      box-shadow:0 10px 22px rgba(37,99,235,.45);display:flex;align-items:center;justify-content:center;
+    "><span style="transform:rotate(45deg);font-size:15px;line-height:1;filter:drop-shadow(0 1px 0 rgba(0,0,0,.15))">💧</span></div>
+  </div>`;
+}
 
-function DeliveryPinMap({ pin, onPinChange }) {
+function DeliveryPinMap({
+  pin,
+  onPinChange,
+  onUseGps,
+  focusId = 0,
+  geoBusy = false,
+  accuracyM = null,
+  fromGps = false,
+}) {
+  const markers = [
+    {
+      id: 'pin',
+      lat: pin.lat,
+      lng: pin.lng,
+      html: deliveryPinHtml({ pulsing: fromGps || geoBusy }),
+      anchor: 'bottom',
+      draggable: true,
+      onDragEnd: onPinChange,
+    },
+  ];
+
   return (
     <div className="relative overflow-hidden rounded-[22px] border border-slate-200/80 bg-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,.6)]">
       <GeoMap
         theme="light"
         center={pin}
-        zoom={15}
-        className="h-[260px] sm:h-[300px]"
+        zoom={focusId > 0 ? 17 : 15}
+        className="h-[300px] sm:h-[360px]"
         onMapClick={onPinChange}
-        markers={[{
-          id: 'pin',
-          lat: pin.lat,
-          lng: pin.lng,
-          html: pinHtml,
-          anchor: 'bottom',
-          draggable: true,
-          onDragEnd: onPinChange,
-        }]}
+        flyTo={
+          focusId > 0
+            ? { id: focusId, lat: pin.lat, lng: pin.lng, zoom: 17, duration: 850 }
+            : null
+        }
+        markers={markers}
       />
-      <div className="pointer-events-none absolute bottom-3 left-3 right-3 z-[5] flex justify-center">
+
+      <div className="absolute right-3 top-3 z-[5] flex flex-col gap-2">
+        <button
+          type="button"
+          onClick={onUseGps}
+          disabled={geoBusy}
+          className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white text-blue-600 shadow-md ring-1 ring-slate-200/80 transition hover:bg-blue-50 disabled:opacity-50"
+          aria-label="Use my GPS"
+          title="Use my GPS"
+        >
+          <LocateFixed size={18} className={geoBusy ? 'animate-pulse' : ''} />
+        </button>
+      </div>
+
+      <div className="pointer-events-none absolute bottom-3 left-3 right-3 z-[5] flex flex-col items-center gap-2">
+        {(fromGps || accuracyM != null) && (
+          <span className="rounded-full bg-emerald-600/95 px-3 py-1 text-[11px] font-semibold text-white shadow-md">
+            {geoBusy
+              ? 'Finding you…'
+              : accuracyM != null
+                ? `GPS locked · ±${Math.max(5, Math.round(accuracyM))} m`
+                : 'GPS locked · drag to fine-tune'}
+          </span>
+        )}
         <span className="rounded-full bg-white/95 px-3.5 py-1.5 text-[11px] font-semibold text-slate-600 shadow-md ring-1 ring-slate-200/80">
-          Drag the pin or tap the map
+          Tap the map or drag the pin to set drop-off
         </span>
       </div>
     </div>
@@ -265,6 +332,9 @@ export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }
   const [notes, setNotes] = useState('');
   const [pin, setPin] = useState(DEFAULT_CENTER);
   const [pinReady, setPinReady] = useState(false);
+  const [mapFocusId, setMapFocusId] = useState(0);
+  const [pinFromGps, setPinFromGps] = useState(false);
+  const [gpsAccuracy, setGpsAccuracy] = useState(null);
   const [geoBusy, setGeoBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -294,7 +364,10 @@ export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }
         const coords = await apiGeocode(user.address);
         if (!cancelled && coords.lat != null && coords.lng != null) {
           setPin({ lat: coords.lat, lng: coords.lng });
+          setPinFromGps(false);
+          setGpsAccuracy(null);
           setPinReady(true);
+          setMapFocusId((n) => n + 1);
           return;
         }
       }
@@ -303,10 +376,13 @@ export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }
           (pos) => {
             if (cancelled) return;
             setPin({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+            setPinFromGps(true);
+            setGpsAccuracy(pos.coords.accuracy ?? null);
             setPinReady(true);
+            setMapFocusId((n) => n + 1);
           },
           () => { if (!cancelled) setPinReady(true); },
-          { enableHighAccuracy: true, timeout: 8000 }
+          { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
         );
       } else {
         setPinReady(true);
@@ -317,9 +393,15 @@ export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }
     return () => { cancelled = true; };
   }, [isDelivery, pinReady, user?.address]);
 
-  const applyPin = useCallback(async ({ lat, lng }, { reverse = true } = {}) => {
+  const applyPin = useCallback(async (
+    { lat, lng, accuracy = null },
+    { reverse = true, focus = false, fromGps = false } = {},
+  ) => {
     setPin({ lat, lng });
     setPinReady(true);
+    setPinFromGps(Boolean(fromGps));
+    setGpsAccuracy(fromGps && accuracy != null ? accuracy : null);
+    if (focus) setMapFocusId((n) => n + 1);
     if (!reverse) return;
     setGeoBusy(true);
     try {
@@ -346,7 +428,10 @@ export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }
         const coords = await apiGeocode(value.trim());
         if (coords.lat != null && coords.lng != null) {
           setPin({ lat: coords.lat, lng: coords.lng });
+          setPinFromGps(false);
+          setGpsAccuracy(null);
           setPinReady(true);
+          setMapFocusId((n) => n + 1);
         }
       } catch { /* ignore */ }
       finally { setGeoBusy(false); }
@@ -364,16 +449,26 @@ export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }
       setError('Geolocation is not available on this device.');
       return;
     }
+    setError('');
     setGeoBusy(true);
+    setPinFromGps(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        applyPin({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        applyPin(
+          {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+          },
+          { reverse: true, focus: true, fromGps: true },
+        );
       },
       () => {
         setGeoBusy(false);
+        setPinFromGps(false);
         setError('Could not get your location. Allow GPS or drop the pin manually.');
       },
-      { enableHighAccuracy: true, timeout: 10000 }
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 },
     );
   }
 
@@ -750,17 +845,35 @@ export default function RequestServicePage({ user, onOrderPlaced, onViewOrders }
                         disabled={geoBusy}
                         className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1.5 text-[11px] font-semibold text-blue-700 ring-1 ring-blue-100 transition hover:bg-blue-100 disabled:opacity-50"
                       >
-                        <LocateFixed size={12} />
-                        Use my GPS
+                        <LocateFixed size={12} className={geoBusy ? 'animate-pulse' : ''} />
+                        {geoBusy ? 'Locating…' : 'Use my GPS'}
                       </button>
                     </div>
-                    <DeliveryPinMap pin={pin} onPinChange={(p) => applyPin(p)} />
-                    <p className="mt-2 flex items-center gap-1.5 text-[11px] text-muted">
-                      <Crosshair size={12} className="text-blue-500" />
-                      {geoBusy
-                        ? 'Updating location…'
-                        : `${pin.lat.toFixed(5)}, ${pin.lng.toFixed(5)}`}
-                    </p>
+                    <DeliveryPinMap
+                      pin={pin}
+                      onPinChange={(p) => applyPin(p, { fromGps: false })}
+                      onUseGps={useMyLocation}
+                      focusId={mapFocusId}
+                      geoBusy={geoBusy}
+                      accuracyM={gpsAccuracy}
+                      fromGps={pinFromGps}
+                    />
+                    <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
+                      <p className="flex items-center gap-1.5 text-[11px] text-muted">
+                        <Crosshair size={12} className="text-blue-500" />
+                        {geoBusy
+                          ? 'Updating location…'
+                          : pinFromGps
+                            ? `Your GPS · ${pin.lat.toFixed(5)}, ${pin.lng.toFixed(5)}`
+                            : `Pinned · ${pin.lat.toFixed(5)}, ${pin.lng.toFixed(5)}`}
+                      </p>
+                      {address.trim() && (
+                        <p className="max-w-[min(100%,18rem)] truncate text-[11px] font-medium text-ink/70" title={address}>
+                          <MapPin size={11} className="mr-1 inline text-blue-500" />
+                          {address}
+                        </p>
+                      )}
+                    </div>
                   </div>
 
                   <div>

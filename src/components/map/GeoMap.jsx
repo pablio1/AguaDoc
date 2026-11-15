@@ -16,6 +16,7 @@ import { apiGetMapsConfig } from '../../api';
  * - geometryFormat: 'lnglat' | 'latlng'
  * - follow: { enabled, lat, lng, bearing, pitch, zoom }
  * - fitPoints: [[lat,lng], ...]
+ * - flyTo: { id, lat, lng, zoom?, duration? } — camera flies when `id` changes
  * - onMapClick({lat,lng})
  * - onUserDrag()
  * - className / style
@@ -29,6 +30,7 @@ export default function GeoMap({
   geometryFormat = 'lnglat',
   follow = null,
   fitPoints = null,
+  flyTo = null,
   onMapClick,
   onUserDrag,
   className = '',
@@ -44,9 +46,24 @@ export default function GeoMap({
   const apiKeyRef = useRef('');
   const onMapClickRef = useRef(onMapClick);
   const onUserDragRef = useRef(onUserDrag);
+  const flyToRef = useRef(flyTo);
+  const appliedFlyToId = useRef(null);
 
   useEffect(() => { onMapClickRef.current = onMapClick; }, [onMapClick]);
   useEffect(() => { onUserDragRef.current = onUserDrag; }, [onUserDrag]);
+  useEffect(() => { flyToRef.current = flyTo; }, [flyTo]);
+
+  function applyFlyTo(map, target) {
+    if (!map || !target || target.lat == null || target.lng == null) return;
+    if (target.id != null && appliedFlyToId.current === target.id) return;
+    appliedFlyToId.current = target.id ?? appliedFlyToId.current;
+    map.easeTo({
+      center: [Number(target.lng), Number(target.lat)],
+      zoom: target.zoom ?? 17,
+      duration: target.duration ?? 700,
+      essential: true,
+    });
+  }
 
   // Init map once
   useEffect(() => {
@@ -100,6 +117,7 @@ export default function GeoMap({
       map.on('load', () => {
         ensureRouteLayers();
         map.resize();
+        applyFlyTo(map, flyToRef.current);
       });
 
       // Invalid Geoapify key / style → fall back to raster basemap instead of a black canvas
@@ -287,6 +305,26 @@ export default function GeoMap({
     valid.forEach(([lat, lng]) => bounds.extend([Number(lng), Number(lat)]));
     map.fitBounds(bounds, { padding: 60, maxZoom: 16, duration: 600 });
   }, [fitPoints]);
+
+  // Explicit fly-to (e.g. "Use my GPS") — keyed by flyTo.id so drags don't re-trigger
+  useEffect(() => {
+    if (!flyTo || flyTo.lat == null || flyTo.lng == null) return undefined;
+    const map = mapRef.current;
+    if (map) {
+      const run = () => applyFlyTo(map, flyTo);
+      if (map.isStyleLoaded()) run();
+      else map.once('load', run);
+      return undefined;
+    }
+    // Map still booting — retry briefly until ref is ready (load handler also applies)
+    const timer = setInterval(() => {
+      const ready = mapRef.current;
+      if (!ready) return;
+      clearInterval(timer);
+      applyFlyTo(ready, flyToRef.current || flyTo);
+    }, 80);
+    return () => clearInterval(timer);
+  }, [flyTo?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- only refocus when id changes
 
   // Navigation follow camera
   useEffect(() => {

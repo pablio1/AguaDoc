@@ -122,9 +122,34 @@ async function resolveCoords({ lat, lng, address }) {
   return geocodeAddress(address);
 }
 
-// Your refill station's coordinates — used as the route's starting point.
-// TODO: replace with AguaDoc's actual station location in Barangay Pajo.
-const DEPOT = { lat: 10.3157, lng: 123.9740, name: 'AguaDoc Station' };
+// Default refill station — overridden by Admin → Settings → Store location.
+const DEFAULT_DEPOT = { lat: 10.3157, lng: 123.9740, name: 'AguaDoc Station' };
+
+function parseStoreLocation(raw) {
+  if (!raw) return null;
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    const lat = Number(parsed?.lat);
+    const lng = Number(parsed?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+    const name = String(parsed?.name || '').trim() || DEFAULT_DEPOT.name;
+    const address = String(parsed?.address || '').trim();
+    return {
+      lat,
+      lng,
+      name,
+      ...(address ? { address } : {}),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function getDepot() {
+  const fromSettings = parseStoreLocation(await getSetting('store_location'));
+  return fromSettings || { ...DEFAULT_DEPOT };
+}
 
 // Public OSRM mirrors — project-osrm.org is free but flaky (rate limits / timeouts).
 const OSRM_BASES = [
@@ -292,6 +317,11 @@ const SETTINGS_META = {
     secret: true,
     env: 'GEOAPIFY_API_KEY',
   },
+  store_location: {
+    label: 'Store / refill station location',
+    secret: false,
+    json: true,
+  },
 };
 
 function sanitizeFrontendBase(url) {
@@ -355,15 +385,29 @@ async function getPublicSettings() {
   for (const [key, meta] of Object.entries(SETTINGS_META)) {
     const value = await getSetting(key);
     const configured = Boolean(value);
+    let publicValue = '';
+    let hint = value || null;
+    if (meta.secret) {
+      publicValue = undefined;
+      hint = maskSecret(value);
+    } else if (meta.json && key === 'store_location') {
+      const loc = parseStoreLocation(value) || (configured ? null : { ...DEFAULT_DEPOT });
+      publicValue = loc;
+      hint = loc
+        ? `${loc.name} · ${Number(loc.lat).toFixed(5)}, ${Number(loc.lng).toFixed(5)}`
+        : null;
+    } else {
+      publicValue = value || '';
+    }
     out[key] = {
       label: meta.label,
       secret: meta.secret,
-      configured,
+      configured: key === 'store_location' ? Boolean(parseStoreLocation(value)) : configured,
       source: configured
         ? (await getSettingSource(key))
-        : 'none',
-      value: meta.secret ? undefined : (value || ''),
-      hint: meta.secret ? maskSecret(value) : (value || null),
+        : (key === 'store_location' ? 'default' : 'none'),
+      value: publicValue,
+      hint,
     };
   }
   return out;
@@ -389,7 +433,20 @@ async function getSettingSource(key) {
 
 async function upsertSetting(key, value, updatedBy = 'Admin') {
   if (!SETTINGS_META[key]) throw new Error(`Unknown setting: ${key}`);
-  const cleaned = value == null ? '' : String(value).trim();
+
+  let cleaned = '';
+  if (SETTINGS_META[key].json && key === 'store_location') {
+    if (value === '' || value == null) {
+      cleaned = '';
+    } else {
+      const loc = parseStoreLocation(typeof value === 'string' ? value : JSON.stringify(value));
+      if (!loc) throw new Error('Store location needs valid latitude and longitude.');
+      cleaned = JSON.stringify(loc);
+    }
+  } else {
+    cleaned = value == null ? '' : String(value).trim();
+  }
+
   if (!cleaned) {
     await pool.query('DELETE FROM app_settings WHERE settingKey = ?', [key]);
     return;
@@ -1572,6 +1629,7 @@ app.get('/api/rider/route', async (req, res) => {
 // ── DELIVERY ROUTE (multi-stop via Geoapify, OSRM trip fallback) ──
 app.get('/api/delivery-route', async (req, res) => {
   try {
+    const depot = await getDepot();
     const [orders] = await pool.query(
       `SELECT * FROM orders
        WHERE status IN ('Pending','Assigned','Accepted','Processing','Out for Delivery')
@@ -1580,14 +1638,14 @@ app.get('/api/delivery-route', async (req, res) => {
     );
 
     if (orders.length === 0) {
-      return res.json({ depot: DEPOT, stops: [], geometry: [], fallback: false, provider: 'none' });
+      return res.json({ depot, stops: [], geometry: [], fallback: false, provider: 'none' });
     }
 
     const stopPoints = orders.map((o) => ({ lat: Number(o.lat), lng: Number(o.lng), order: o }));
 
     // Geoapify: depot → stops (optimize intermediate order when possible)
     try {
-      const waypoints = [DEPOT, ...stopPoints];
+      const waypoints = [depot, ...stopPoints];
       // Need fixed end for optimize_stops — duplicate last stop as destination
       if (waypoints.length >= 3) {
         waypoints.push(stopPoints[stopPoints.length - 1]);
@@ -1608,7 +1666,7 @@ app.get('/api/delivery-route', async (req, res) => {
           if (uniq.length) stops = uniq.map((i) => orders[i]).filter(Boolean);
         }
         return res.json({
-          depot: DEPOT,
+          depot,
           stops,
           geometry: routes[0].geometry,
           fallback: false,
@@ -1622,7 +1680,7 @@ app.get('/api/delivery-route', async (req, res) => {
 
     // OSRM trip fallback
     try {
-      const points = [DEPOT, ...orders.map((o) => ({ lat: Number(o.lat), lng: Number(o.lng) }))];
+      const points = [depot, ...orders.map((o) => ({ lat: Number(o.lat), lng: Number(o.lng) }))];
       const coordString = points.map((o) => `${o.lng},${o.lat}`).join(';');
       const trip = await fetchOsrmJson(
         `/trip/v1/driving/${coordString}?source=first&roundtrip=false&geometries=geojson&overview=full`
@@ -1634,7 +1692,7 @@ app.get('/api/delivery-route', async (req, res) => {
         .sort((a, b) => a.tripOrder - b.tripOrder)
         .map((w) => orders[w.inputIndex - 1]);
       return res.json({
-        depot: DEPOT,
+        depot,
         stops,
         geometry: trip.trips[0].geometry.coordinates,
         fallback: false,
@@ -1646,11 +1704,11 @@ app.get('/api/delivery-route', async (req, res) => {
     }
 
     const geometry = straightLineGeometry([
-      DEPOT,
+      depot,
       ...orders.map((o) => ({ lat: Number(o.lat), lng: Number(o.lng) })),
     ]);
     return res.json({
-      depot: DEPOT,
+      depot,
       stops: orders,
       geometry,
       fallback: true,
@@ -2585,6 +2643,10 @@ app.get('/api/settings', async (req, res) => {
           title: 'MapLibre + Geoapify',
           keys: ['geoapify_api_key'],
         },
+        store: {
+          title: 'Store location',
+          keys: ['store_location'],
+        },
       },
     });
   } catch (err) {
@@ -2597,10 +2659,12 @@ app.get('/api/settings', async (req, res) => {
 app.get('/api/maps/config', async (req, res) => {
   try {
     const apiKey = await getSetting('geoapify_api_key');
+    const depot = await getDepot();
     res.json({
       provider: 'geoapify',
       apiKey: apiKey || '',
       configured: Boolean(apiKey),
+      depot,
       styles: {
         light: apiKey
           ? `https://maps.geoapify.com/v1/styles/osm-bright/style.json?apiKey=${encodeURIComponent(apiKey)}`

@@ -36,12 +36,24 @@ export const SERVICE_PRODUCTS = [
 
 export const DEFAULT_PRODUCT_ID = 'refill-slim';
 
-/** AguaDoc refill station (same depot used for routing). */
+/** Default AguaDoc refill station — overridden at runtime by Admin → Settings pin. */
 export const REFILL_STATION = {
   lat: 10.3157,
   lng: 123.9740,
   name: 'AguaDoc Station',
 };
+
+export function normalizeStation(depot) {
+  const lat = Number(depot?.lat);
+  const lng = Number(depot?.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return { ...REFILL_STATION };
+  return {
+    lat,
+    lng,
+    name: String(depot?.name || '').trim() || REFILL_STATION.name,
+    ...(depot?.address ? { address: String(depot.address) } : {}),
+  };
+}
 
 export const REFILL_TRIP_STEPS = [
   { id: 'pickup', label: 'Pickup empty', hint: 'Collect jug from customer' },

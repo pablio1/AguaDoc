@@ -17,6 +17,7 @@ import {
   apiGetNotifications,
   apiMarkNotificationRead,
   apiMarkAllNotificationsRead,
+  apiGetMapsConfig,
 } from '../api';
 import GeoMap from '../components/map/GeoMap';
 import { formatMoney } from '../lib/money';
@@ -25,17 +26,16 @@ import {
   REFILL_TRIP_STEPS,
   isRefillOrder,
   getServiceProduct,
+  normalizeStation,
 } from '../lib/products';
 
-const DEPOT = [REFILL_STATION.lat, REFILL_STATION.lng];
-
-function navDestination(order) {
+function navDestination(order, station = REFILL_STATION) {
   if (!order) return null;
   if (isRefillOrder(order) && (order.tripLeg || 'pickup') === 'to_station') {
     return {
-      lat: REFILL_STATION.lat,
-      lng: REFILL_STATION.lng,
-      label: REFILL_STATION.name,
+      lat: station.lat,
+      lng: station.lng,
+      label: station.name,
       kind: 'station',
     };
   }
@@ -394,8 +394,8 @@ function PodCameraCapture({ photo, onCapture, onClear }) {
   );
 }
 
-function externalMapsUrl(order) {
-  const dest = navDestination(order);
+function externalMapsUrl(order, station = REFILL_STATION) {
+  const dest = navDestination(order, station);
   if (!dest) return null;
   return `https://www.google.com/maps/dir/?api=1&destination=${dest.lat},${dest.lng}&travelmode=driving`;
 }
@@ -442,6 +442,7 @@ export default function RiderDashboard({ user, onLogout }) {
   const [podCash, setPodCash] = useState('');
   const [podPhoto, setPodPhoto] = useState(null);
   const [podBusy, setPodBusy] = useState(false);
+  const [station, setStation] = useState(REFILL_STATION);
   const watchRef = useRef(null);
   const lastGpsRef = useRef(null);
   const lastFetchRef = useRef({ t: 0, lat: null, lng: null, destKey: null, ok: false });
@@ -553,7 +554,17 @@ export default function RiderDashboard({ user, onLogout }) {
     }
   }, [mine, sharing, startGps]);
 
-  const activeDest = useMemo(() => navDestination(activeOrder), [activeOrder]);
+  useEffect(() => {
+    let cancelled = false;
+    apiGetMapsConfig()
+      .then((cfg) => {
+        if (!cancelled && cfg?.depot) setStation(normalizeStation(cfg.depot));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  const activeDest = useMemo(() => navDestination(activeOrder, station), [activeOrder, station]);
 
   useEffect(() => {
     let cancelled = false;
@@ -798,7 +809,7 @@ export default function RiderDashboard({ user, onLogout }) {
     ? [gps.lat, gps.lng]
     : activeDest
       ? [activeDest.lat, activeDest.lng]
-      : DEPOT;
+      : [station.lat, station.lng];
   const fitPoints = [
     gps ? [gps.lat, gps.lng] : null,
     activeDest ? [activeDest.lat, activeDest.lng] : null,
@@ -1209,7 +1220,7 @@ export default function RiderDashboard({ user, onLogout }) {
               {list.map((order) => {
                 const selected = activeOrder?.id === order.id;
                 const pay = payLabel(order);
-                const mapsUrl = externalMapsUrl(order);
+                const mapsUrl = externalMapsUrl(order, station);
                 return (
                   <article
                     key={order.id}
@@ -1361,7 +1372,7 @@ export default function RiderDashboard({ user, onLogout }) {
                         </button>
                       )}
 
-                      {navDestination(order) && tab !== 'open' && (
+                      {navDestination(order, station) && tab !== 'open' && (
                         <button
                           type="button"
                           onClick={() => openNavigation(order)}

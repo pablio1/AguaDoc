@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   CheckCircle2,
   CreditCard,
@@ -7,16 +7,20 @@ import {
   KeyRound,
   Link2,
   Map as MapIcon,
+  MapPinned,
   MessageSquareText,
   RefreshCw,
   Save,
   Shield,
+  Store,
   Wifi,
   WifiOff,
 } from 'lucide-react';
 import PageHeader from '../components/admin/PageHeader';
+import GeoMap from '../components/map/GeoMap';
 import { showToast } from '../components/ui/Toast';
 import { apiGetSettings, apiUpdateSettings } from '../api';
+import { DEFAULT_CENTER } from '../lib/geoapify';
 
 const FIELD_HELP = {
   xendit_secret_key:
@@ -43,6 +47,19 @@ const ICONS = {
   geoapify_api_key: MapIcon,
 };
 
+const DEFAULT_STORE = {
+  lat: DEFAULT_CENTER.lat,
+  lng: DEFAULT_CENTER.lng,
+  name: 'AguaDoc Station',
+  address: '',
+};
+
+const storePinHtml = `<div style="
+  width:40px;height:40px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);
+  background:linear-gradient(135deg,#0ea5e9,#0369a1);border:3px solid #fff;
+  box-shadow:0 8px 18px rgba(3,105,161,.45);display:flex;align-items:center;justify-content:center;
+"><span style="transform:rotate(45deg);font-size:15px;line-height:1">🏪</span></div>`;
+
 function currentAdminName() {
   try {
     const saved = JSON.parse(localStorage.getItem('aguadoc_user') || 'null');
@@ -50,6 +67,20 @@ function currentAdminName() {
   } catch {
     return 'Admin';
   }
+}
+
+function normalizeStoreDraft(value) {
+  if (value && typeof value === 'object') {
+    const lat = Number(value.lat);
+    const lng = Number(value.lng);
+    return {
+      lat: Number.isFinite(lat) ? lat : DEFAULT_STORE.lat,
+      lng: Number.isFinite(lng) ? lng : DEFAULT_STORE.lng,
+      name: String(value.name || '').trim() || DEFAULT_STORE.name,
+      address: String(value.address || '').trim(),
+    };
+  }
+  return { ...DEFAULT_STORE };
 }
 
 export default function SettingsPage() {
@@ -70,8 +101,13 @@ export default function SettingsPage() {
         setGroups(data.groups || {});
         const nextDraft = {};
         Object.entries(data.settings || {}).forEach(([key, meta]) => {
-          nextDraft[key] = meta.secret ? '' : meta.value || '';
+          if (key === 'store_location') {
+            nextDraft[key] = normalizeStoreDraft(meta.value);
+          } else {
+            nextDraft[key] = meta.secret ? '' : meta.value || '';
+          }
         });
+        if (!nextDraft.store_location) nextDraft.store_location = { ...DEFAULT_STORE };
         setDraft(nextDraft);
       })
       .catch((err) => {
@@ -92,16 +128,33 @@ export default function SettingsPage() {
 
   const smsReady = useMemo(() => Boolean(settings.semaphore_api_key?.configured), [settings]);
   const mapsReady = useMemo(() => Boolean(settings.geoapify_api_key?.configured), [settings]);
+  const storeReady = useMemo(() => Boolean(settings.store_location?.configured), [settings]);
+  const storeDraft = draft.store_location || DEFAULT_STORE;
 
   function setField(key, value) {
     setDraft((prev) => ({ ...prev, [key]: value }));
   }
+
+  const setStorePin = useCallback((point) => {
+    setDraft((prev) => ({
+      ...prev,
+      store_location: {
+        ...(prev.store_location || DEFAULT_STORE),
+        lat: Number(point.lat),
+        lng: Number(point.lng),
+      },
+    }));
+  }, []);
 
   async function handleSave(keys) {
     const payload = {};
     keys.forEach((key) => {
       const meta = settings[key];
       const value = draft[key];
+      if (key === 'store_location') {
+        payload[key] = normalizeStoreDraft(value);
+        return;
+      }
       if (meta?.secret) {
         // Blank secret = leave unchanged. Explicit clear uses the Clear button.
         if (value && !String(value).includes('•')) payload[key] = value;
@@ -124,7 +177,10 @@ export default function SettingsPage() {
       setSettings(result.settings || {});
       const nextDraft = { ...draft };
       Object.entries(result.settings || {}).forEach(([key, meta]) => {
-        if (keys.includes(key)) {
+        if (!keys.includes(key)) return;
+        if (key === 'store_location') {
+          nextDraft[key] = normalizeStoreDraft(meta.value);
+        } else {
           nextDraft[key] = meta.secret ? '' : meta.value || '';
         }
       });
@@ -234,8 +290,10 @@ export default function SettingsPage() {
   function renderGroup(groupKey, accent) {
     const group = groups[groupKey];
     if (!group) return null;
-    const ready = groupKey === 'payments' ? paymentReady : groupKey === 'sms' ? smsReady : mapsReady;
-    const GroupIcon = groupKey === 'payments' ? CreditCard : groupKey === 'sms' ? MessageSquareText : MapIcon;
+    const ready =
+      groupKey === 'payments' ? paymentReady : groupKey === 'sms' ? smsReady : mapsReady;
+    const GroupIcon =
+      groupKey === 'payments' ? CreditCard : groupKey === 'sms' ? MessageSquareText : MapIcon;
 
     return (
       <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_8px_24px_rgba(15,42,74,0.04)]">
@@ -253,7 +311,7 @@ export default function SettingsPage() {
               </div>
             </div>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-semibold text-white">
-              {ready ? <CheckCircle2 size={13} /> : groupKey === 'sms' ? <WifiOff size={13} /> : <WifiOff size={13} />}
+              {ready ? <CheckCircle2 size={13} /> : <WifiOff size={13} />}
               {ready ? 'Connected' : 'Needs setup'}
             </span>
           </div>
@@ -288,7 +346,7 @@ export default function SettingsPage() {
     <div className="space-y-5">
       <PageHeader
         title="Integrations"
-        subtitle="Configure GCash (Xendit), Semaphore SMS, and Geoapify maps. Values saved here override .env."
+        subtitle="Configure GCash (Xendit), Semaphore SMS, maps, and your store pin. Values saved here override .env."
       >
         <button
           type="button"
@@ -303,7 +361,7 @@ export default function SettingsPage() {
         </button>
       </PageHeader>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="agua-card flex items-center gap-3 px-5 py-4">
           <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${paymentReady ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-700'}`}>
             <CreditCard size={18} />
@@ -331,7 +389,126 @@ export default function SettingsPage() {
             <p className="font-display text-lg font-bold text-ink">{mapsReady ? 'Ready' : 'Setup needed'}</p>
           </div>
         </div>
+        <div className="agua-card flex items-center gap-3 px-5 py-4">
+          <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${storeReady ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-700'}`}>
+            <MapPinned size={18} />
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-400">Store pin</p>
+            <p className="font-display text-lg font-bold text-ink">{storeReady ? 'Pinned' : 'Default'}</p>
+          </div>
+        </div>
       </div>
+
+      {/* Store location — pin on map */}
+      <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_8px_24px_rgba(15,42,74,0.04)]">
+        <div className="border-b border-slate-100 bg-gradient-to-br from-[#0c4a6e] via-[#0284c7] to-[#0c4a6e] px-5 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 text-white">
+                <Store size={18} />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-white">Store location</h2>
+                <p className="text-[12px] text-white/70">
+                  Pin the refill station used for rider routes and refill trips
+                </p>
+              </div>
+            </div>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-semibold text-white">
+              {storeReady ? <CheckCircle2 size={13} /> : <MapPinned size={13} />}
+              {storeReady ? 'Saved pin' : 'Using default'}
+            </span>
+          </div>
+        </div>
+
+        <div className="space-y-4 p-4 sm:p-5">
+          {loading ? (
+            <div className="h-[300px] animate-pulse rounded-2xl bg-slate-100" />
+          ) : (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.06em] text-slate-400">
+                    Station name
+                  </label>
+                  <input
+                    type="text"
+                    className="agua-input"
+                    value={storeDraft.name || ''}
+                    onChange={(e) =>
+                      setDraft((prev) => ({
+                        ...prev,
+                        store_location: { ...(prev.store_location || DEFAULT_STORE), name: e.target.value },
+                      }))
+                    }
+                    placeholder="AguaDoc Station"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.06em] text-slate-400">
+                    Address (optional)
+                  </label>
+                  <input
+                    type="text"
+                    className="agua-input"
+                    value={storeDraft.address || ''}
+                    onChange={(e) =>
+                      setDraft((prev) => ({
+                        ...prev,
+                        store_location: { ...(prev.store_location || DEFAULT_STORE), address: e.target.value },
+                      }))
+                    }
+                    placeholder="Barangay Pajo, Lapu-Lapu City"
+                  />
+                </div>
+              </div>
+
+              <div className="relative overflow-hidden rounded-[22px] border border-slate-200/80 bg-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,.6)]">
+                <GeoMap
+                  theme="light"
+                  center={{ lat: storeDraft.lat, lng: storeDraft.lng }}
+                  zoom={15}
+                  className="h-[280px] sm:h-[340px]"
+                  onMapClick={setStorePin}
+                  markers={[
+                    {
+                      id: 'store',
+                      lat: storeDraft.lat,
+                      lng: storeDraft.lng,
+                      html: storePinHtml,
+                      anchor: 'bottom',
+                      draggable: true,
+                      onDragEnd: setStorePin,
+                      popupHtml: `<strong>${storeDraft.name || 'Store'}</strong>`,
+                    },
+                  ]}
+                />
+                <div className="pointer-events-none absolute bottom-3 left-3 right-3 z-[5] flex justify-center">
+                  <span className="rounded-full bg-white/95 px-3.5 py-1.5 text-[11px] font-semibold text-slate-600 shadow-md ring-1 ring-slate-200/80">
+                    Tap the map or drag the pin to set the store
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="font-mono text-[12px] text-muted">
+                  {Number(storeDraft.lat).toFixed(5)}, {Number(storeDraft.lng).toFixed(5)}
+                </p>
+                <button
+                  type="button"
+                  disabled={saving || loading}
+                  onClick={() => handleSave(['store_location'])}
+                  className="agua-btn agua-btn-primary !py-2.5 !text-sm disabled:opacity-50"
+                >
+                  <Save size={15} />
+                  {saving ? 'Saving…' : 'Save store location'}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </section>
 
       <div className="grid gap-5 xl:grid-cols-2">
         {renderGroup('payments', 'bg-gradient-to-br from-[#0f172a] via-[#1e3a5f] to-[#0f172a]')}
